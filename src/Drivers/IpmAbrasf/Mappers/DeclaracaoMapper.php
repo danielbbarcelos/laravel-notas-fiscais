@@ -133,6 +133,37 @@ class DeclaracaoMapper
         }
     }
 
+    /**
+     * Canônico -> apenas o <Rps> ABRASF (sem o envelope SOAP), para servir de
+     * "XML da nota" quando o município não devolveu a NFS-e oficial assinada.
+     */
+    public function rps(NotaServico $dados, ?Prestador $prestadorPadrao = null): string
+    {
+        $prestador = $dados->prestador ?? $prestadorPadrao;
+
+        if ($prestador === null) {
+            throw new InvalidArgumentException(
+                'Prestador não informado: defina-o na NotaServico ou em notas-fiscais.drivers.{provedor}.'
+            );
+        }
+
+        if ($dados->itens === []) {
+            throw new InvalidArgumentException('NotaServico sem itens: o ABRASF exige um serviço.');
+        }
+
+        $item = $dados->itens[0];
+        $municipio = $item->codigoLocalPrestacao !== '' ? $item->codigoLocalPrestacao : $prestador->codigoMunicipio;
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->formatOutput = true;
+
+        $rps = $dom->createElement('Rps');
+        $dom->appendChild($rps);
+        $this->declaracao($dom, $rps, $dados, $prestador, $item, $municipio);
+
+        return (string) $dom->saveXML();
+    }
+
     /** Resposta do IPM -> DTO canônico. */
     public function paraDominio(string $xmlResposta, ?string $linkTemplate = null): NotaEmitida
     {

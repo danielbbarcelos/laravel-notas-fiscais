@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DanielBBarcelos\NotasFiscais\Drivers\Ipm;
 
+use DanielBBarcelos\NotasFiscais\Contracts\ExportaArquivos;
 use DanielBBarcelos\NotasFiscais\Contracts\NfseGateway;
 use DanielBBarcelos\NotasFiscais\Data\Nfse\Cancelamento;
 use DanielBBarcelos\NotasFiscais\Data\Nfse\NotaEmitida;
@@ -12,12 +13,13 @@ use DanielBBarcelos\NotasFiscais\Data\Nfse\Prestador;
 use DanielBBarcelos\NotasFiscais\Drivers\Ipm\Mappers\CancelamentoMapper;
 use DanielBBarcelos\NotasFiscais\Drivers\Ipm\Mappers\ConsultaMapper;
 use DanielBBarcelos\NotasFiscais\Drivers\Ipm\Mappers\NotaServicoMapper;
+use DanielBBarcelos\NotasFiscais\Export\ExportacaoTxt;
 
 /**
  * Implementação de NFS-e do IPM Atende.Net. Constrói o XML via mappers, envia
  * pelo connector e devolve o retorno mapeado para NotaEmitida.
  */
-class IpmNfseGateway implements NfseGateway
+class IpmNfseGateway implements ExportaArquivos, NfseGateway
 {
     public function __construct(
         protected IpmConnector $http,
@@ -54,5 +56,16 @@ class IpmNfseGateway implements NfseGateway
         $xml = $this->consultas->porAutenticidade($codigo);
 
         return $this->notas->paraDominio($this->http->enviar($xml));
+    }
+
+    public function xmlNota(NotaServico $dados, ?NotaEmitida $emitida = null): string
+    {
+        // O REST proprietário não tem XML assinado; devolvemos o <nfse> do IPM.
+        return $this->notas->paraApi($dados, $this->prestadorPadrao);
+    }
+
+    public function txtExportacao(NotaServico $dados, NotaEmitida $emitida): string
+    {
+        return ExportacaoTxt::gerar($dados, $emitida, $this->prestadorPadrao);
     }
 }

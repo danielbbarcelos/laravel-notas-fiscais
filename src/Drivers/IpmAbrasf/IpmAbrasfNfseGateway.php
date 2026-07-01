@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DanielBBarcelos\NotasFiscais\Drivers\IpmAbrasf;
 
+use DanielBBarcelos\NotasFiscais\Contracts\ExportaArquivos;
 use DanielBBarcelos\NotasFiscais\Contracts\NfseGateway;
 use DanielBBarcelos\NotasFiscais\Data\Nfse\Cancelamento;
 use DanielBBarcelos\NotasFiscais\Data\Nfse\NotaEmitida;
@@ -14,13 +15,14 @@ use DanielBBarcelos\NotasFiscais\Drivers\IpmAbrasf\Mappers\ConsultaAbrasfMapper;
 use DanielBBarcelos\NotasFiscais\Drivers\IpmAbrasf\Mappers\DeclaracaoMapper;
 use DanielBBarcelos\NotasFiscais\Enums\SituacaoNota;
 use DanielBBarcelos\NotasFiscais\Exceptions\NotaFiscalException;
+use DanielBBarcelos\NotasFiscais\Export\ExportacaoTxt;
 
 /**
  * Implementação de NFS-e do IPM Atende.Net no padrão ABRASF 2.04 (SOAP).
  * Reaproveita os contratos e DTOs canônicos; só os mappers e o transporte
  * diferem do driver REST proprietário.
  */
-class IpmAbrasfNfseGateway implements NfseGateway
+class IpmAbrasfNfseGateway implements ExportaArquivos, NfseGateway
 {
     public function __construct(
         protected AbrasfSoapConnector $http,
@@ -70,5 +72,22 @@ class IpmAbrasfNfseGateway implements NfseGateway
         throw new NotaFiscalException(
             'Consulta por código de autenticidade não é suportada no padrão ABRASF; use consultar(numero, serie, cadastro).'
         );
+    }
+
+    public function xmlNota(NotaServico $dados, ?NotaEmitida $emitida = null): string
+    {
+        // Prefere o XML oficial assinado, quando o município o devolveu na resposta.
+        $resposta = $emitida?->bruto['xml_response'] ?? null;
+
+        if (is_string($resposta) && ($oficial = AbrasfXml::nfseOficial($resposta)) !== null) {
+            return $oficial;
+        }
+
+        return $this->declaracoes->rps($dados, $this->prestadorPadrao);
+    }
+
+    public function txtExportacao(NotaServico $dados, NotaEmitida $emitida): string
+    {
+        return ExportacaoTxt::gerar($dados, $emitida, $this->prestadorPadrao);
     }
 }

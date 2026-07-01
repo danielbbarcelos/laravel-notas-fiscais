@@ -22,8 +22,9 @@ O exemplo principal usa o driver **`ipm-abrasf`** (ABRASF 2.04 / SOAP — o padr
 7. [Endpoints REST](#7-endpoints-rest)
 8. [Persistência da nota emitida](#8-persistência-da-nota-emitida)
 9. [PDF do comprovante](#9-pdf-do-comprovante)
-10. [Fluxo ponta a ponta](#10-fluxo-ponta-a-ponta)
-11. [Troubleshooting](#11-troubleshooting)
+10. [Exportação de arquivos (XML/TXT)](#10-exportação-de-arquivos-xmltxt)
+11. [Fluxo ponta a ponta](#11-fluxo-ponta-a-ponta)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -48,6 +49,18 @@ interface NfseGateway
     public function cancelar(Cancelamento $dados): NotaEmitida;
     public function consultar(int $numero, int $serie, string $cadastro): NotaEmitida;
     public function consultarPorAutenticidade(string $codigo): NotaEmitida;
+}
+```
+
+Os gateways IPM também implementam o contrato **opcional** `ExportaArquivos`, que gera o XML nativo
+do provedor e o TXT de exportação da nota — reproduzindo o menu *Download* do Atende.Net (ver
+[seção 10](#10-exportação-de-arquivos-xmltxt)):
+
+```php
+interface ExportaArquivos
+{
+    public function xmlNota(NotaServico $dados, ?NotaEmitida $emitida = null): string;
+    public function txtExportacao(NotaServico $dados, NotaEmitida $emitida): string;
 }
 ```
 
@@ -212,8 +225,9 @@ namespace App\Services;
 
 use App\Models\Tenant;
 use DanielBBarcelos\NotasFiscais\Facades\NotaFiscal;
-use DanielBBarcelos\NotasFiscais\Contracts\NfseGateway;
+use DanielBBarcelos\NotasFiscais\Contracts\{NfseGateway, ExportaArquivos};
 use DanielBBarcelos\NotasFiscais\Data\Nfse\{NotaServico, Cancelamento, NotaEmitida};
+use DanielBBarcelos\NotasFiscais\Exceptions\OperacaoNaoSuportadaException;
 
 class NotaFiscalService
 {
@@ -240,6 +254,29 @@ class NotaFiscalService
     public function consultarPorAutenticidade(Tenant $tenant, string $codigo): NotaEmitida
     {
         return $this->gateway($tenant)->consultarPorAutenticidade($codigo);
+    }
+
+    // --- Exportação de arquivos (ver seção 10) ---
+
+    public function xmlNota(Tenant $tenant, NotaServico $nota, ?NotaEmitida $emitida = null): string
+    {
+        return $this->exportador($tenant)->xmlNota($nota, $emitida);
+    }
+
+    public function txtExportacao(Tenant $tenant, NotaServico $nota, NotaEmitida $emitida): string
+    {
+        return $this->exportador($tenant)->txtExportacao($nota, $emitida);
+    }
+
+    private function exportador(Tenant $tenant): ExportaArquivos
+    {
+        $gateway = $this->gateway($tenant);
+
+        if (! $gateway instanceof ExportaArquivos) {
+            throw new OperacaoNaoSuportadaException('Este driver não suporta exportação de arquivos.');
+        }
+
+        return $gateway;
     }
 }
 ```
@@ -274,7 +311,7 @@ $this->renderable(fn (NotaFiscalException $e) =>          // base — catch-all
 
 > **Sobre o `401 "Acesso Negado"`:** ele chega como `NotaFiscalApiException` (credencial/senha do
 > WebService rejeitada, ou CNPJ não habilitado no município). Veja o
-> [Troubleshooting](#11-troubleshooting) e o README para o passo a passo.
+> [Troubleshooting](#12-troubleshooting) e o README para o passo a passo.
 
 ---
 
@@ -546,6 +583,11 @@ class NotaFiscal extends Model
 > `codigoVerificacao`, `link`, `bruto`. Métodos `->emitida()` e `->cancelada()` são atalhos sobre
 > `situacao`.
 
+> **Guarde o `bruto`.** No ABRASF ele contém `xml_response` (a resposta do provedor), de onde a
+> exportação extrai o **XML oficial assinado** da nota — ver [seção 10](#10-exportação-de-arquivos-xmltxt).
+> Reconstrua o `NotaEmitida` com o `bruto` salvo para que `xmlNota()` devolva o documento oficial em
+> vez do RPS local.
+
 ---
 
 ## 9. PDF do comprovante
@@ -595,7 +637,80 @@ cabeçalho.
 
 ---
 
-## 10. Fluxo ponta a ponta
+## 10. Exportação de arquivos (XML/TXT)
+
+Reproduz o menu **Download** do Atende.Net: **XML IPM**, **XML Abrasf** e **TXT**. O ponto
+importante: o Web Service **não devolve** esses arquivos prontos — o pacote os **gera localmente** a
+partir da nota enviada (`NotaServico`) e do retorno da emissão (`NotaEmitida`). Por isso os métodos
+recebem os DTOs, exatamente como o PDF da seção 9.
+
+| Item do menu | Método | O que sai |
+|---|---|---|
+| Download › XML IPM / XML Abrasf | `xmlNota($nota, $emitida)` | XML nativo do provedor |
+| Download › TXT | `txtExportacao($nota, $emitida)` | arquivo posicional (NT 65/2020) |
+| Download › PDF / Impressão | — | é o `NotaEmitida::link` (seção 9) |
+| E-mail · Anexos · Consulta Nota Nacional | — | recursos só do portal, sem endpoint no WebService |
+
+**Semântica do `xmlNota()`:**
+
+- **ABRASF** — se o `$emitida` passado trouxer o XML oficial assinado pela prefeitura (no
+  `bruto['xml_response']`, presente no retorno de emissão/consulta), devolve **esse XML oficial**;
+  senão, monta o `<Rps>`/declaração a partir de `$nota`. Guarde o `bruto` (seção 8) para obter o
+  documento oficial.
+- **REST proprietário** — sempre gera o `<nfse>` do IPM a partir de `$nota` (esse padrão não tem XML
+  assinado; o `$emitida` é ignorado).
+
+**Endpoint de download** — reconstrói os DTOs do `payload`/registro salvo (igual ao PDF) e faz o
+stream do arquivo:
+
+```php
+// routes/api.php
+Route::get('/nfse/{nota}/download/{formato}', [NfseController::class, 'download'])
+    ->whereIn('formato', ['xml', 'txt']);
+
+// app/Http/Controllers/NfseController.php
+public function download(Request $request, NotaFiscalModel $nota, string $formato)
+{
+    $tenant = $request->user()->tenant;
+
+    // Mesma reconstrução da seção 9 (PDF):
+    $dados   = $this->montarNotaServicoDePayload($nota->payload, $tenant);
+    $emitida = $this->emitidaDoRegistro($nota);   // inclua o `bruto` salvo p/ o XML oficial ABRASF
+
+    [$conteudo, $mime, $ext] = match ($formato) {
+        'xml' => [$this->service->xmlNota($tenant, $dados, $emitida),      'application/xml', 'xml'],
+        'txt' => [$this->service->txtExportacao($tenant, $dados, $emitida), 'text/plain',     'txt'],
+    };
+
+    return response()->streamDownload(
+        fn () => print($conteudo),
+        "nfse-{$nota->numero}.{$ext}",
+        ['Content-Type' => $mime],
+    );
+}
+```
+
+**Arquivar no momento da emissão** (alternativa a gerar sob demanda): logo após `emitir()`, persista
+os artefatos no `Storage` para não reconstruir DTOs depois.
+
+```php
+$emitida = $this->service->emitir($tenant, $nota);
+
+Storage::disk('nfse')->put("{$emitida->numero}.xml", $this->service->xmlNota($tenant, $nota, $emitida));
+Storage::disk('nfse')->put("{$emitida->numero}.txt", $this->service->txtExportacao($tenant, $nota, $emitida));
+```
+
+> Drivers que não implementam `ExportaArquivos` fazem o service lançar
+> `OperacaoNaoSuportadaException` (mapeada para HTTP 400 no handler da seção 5). Os dois drivers IPM
+> suportam; a checagem protege provedores futuros.
+
+O **TXT** segue o layout posicional de largura fixa da Nota Técnica IPM 65/2020 — registro **10**
+(documento), um **20** por item e **30** (tomador), terminados em CRLF. Formato único do IPM,
+idêntico nos dois drivers.
+
+---
+
+## 11. Fluxo ponta a ponta
 
 ```
 POST /api/nfse
@@ -614,6 +729,9 @@ POST /api/nfse
 
 GET /api/nfse/{id}/comprovante
    └─ reconstrói DTOs do payload salvo → ComprovanteNfse::gerar → stream PDF        (seção 9)
+
+GET /api/nfse/{id}/download/{xml|txt}
+   └─ reconstrói DTOs (com o `bruto`) → xmlNota()/txtExportacao() → stream arquivo  (seção 10)
 ```
 
 **Trocar de driver por tenant** é só mudar a config: `driver: 'ipm'` + `cidade` (TOM) em vez de
@@ -622,7 +740,7 @@ GET /api/nfse/{id}/comprovante
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 | Sintoma | Causa provável | Onde olhar |
 |---|---|---|
@@ -630,7 +748,8 @@ GET /api/nfse/{id}/comprovante
 | `L1029` | **Competência** retroativa | Use a data atual em `competencia` |
 | `L1099` | `codigoItemListaServico` em **formato errado** | Use pontuado: `01.01.01` |
 | `L1003` | Código do item **não vinculado** ao cadastro econômico | Ajuste no cadastro do prestador na prefeitura |
-| `OperacaoNaoSuportadaException` | Documento/operação não implementado pelo driver | Confira o que o driver suporta |
+| `OperacaoNaoSuportadaException` | Documento/operação não implementado pelo driver (ex.: exportação num driver sem `ExportaArquivos`) | Confira o que o driver suporta (seções 1 e 10) |
+| `xmlNota()` devolve o RPS, não o XML oficial | `NotaEmitida` reconstruído **sem** o `bruto['xml_response']` | Persista e recarregue o `bruto` (seções 8 e 10) |
 
 Todo erro do provedor chega como `NotaFiscalApiException` com `->codigo`, `->corpo` (retorno
 parseado) e `->statusHttp` — logue o `->corpo` para diagnosticar rápido.

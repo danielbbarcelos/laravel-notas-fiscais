@@ -136,6 +136,40 @@ Erros do provedor lançam `NotaFiscalApiException` (com `->codigo` e `->corpo`);
 documento não suportado lança `OperacaoNaoSuportadaException`. Ambas estendem
 `NotaFiscalException`.
 
+## Exportação de arquivos (XML e TXT)
+
+Reproduz o menu **Download** do Atende.Net (XML IPM / XML Abrasf / TXT). Como o
+Web Service **não devolve** esses arquivos prontos, o package os **gera
+localmente** a partir da nota enviada (`NotaServico`) e do retorno da emissão
+(`NotaEmitida`). Os gateways que suportam isso implementam o contrato
+`ExportaArquivos`:
+
+```php
+use DanielBBarcelos\NotasFiscais\Contracts\ExportaArquivos;
+
+$gw = NotaFiscal::driver('ipm-abrasf')->nfse();
+
+if ($gw instanceof ExportaArquivos) {
+    $xml = $gw->xmlNota($nota, $emitida);          // XML nativo do provedor
+    $txt = $gw->txtExportacao($nota, $emitida);    // arquivo-texto (NT 65/2020)
+
+    Storage::put("nfse/{$emitida->numero}.xml", $xml);
+    Storage::put("nfse/{$emitida->numero}.txt", $txt);
+}
+```
+
+- **`xmlNota()`** — no **ABRASF**, se `$emitida` trouxer o XML oficial assinado
+  pela prefeitura (no `bruto['xml_response']` do retorno de emissão/consulta), ele
+  é devolvido; senão monta o `<Rps>`/declaração a partir de `$nota`. No **REST**
+  proprietário sempre gera o `<nfse>` do IPM (esse padrão não tem XML assinado).
+- **`txtExportacao()`** — gera o layout posicional do IPM (Nota Técnica 65/2020:
+  registros **10** documento, **20** por item, **30** tomador). Formato único do
+  IPM, idêntico nos dois drivers.
+
+> O **PDF** e a **Impressão** do menu correspondem ao `NotaEmitida::link` (ver
+> abaixo). Já **E-mail**, **Anexos** e **Consulta Nota Nacional** são recursos do
+> portal sem endpoint no Web Service — fora do escopo do package.
+
 ## Comprovante da NFS-e em PDF
 
 O PDF **oficial** do município (link `/ged/r/{hash}` do Atende.Net) é gerado por um

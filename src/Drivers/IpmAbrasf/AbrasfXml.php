@@ -116,6 +116,31 @@ final class AbrasfXml
         return strtr($template, ['{codigo}' => $codigo, '{numero}' => $numero ?? '']);
     }
 
+    /**
+     * Extrai a NFS-e oficial (assinada pela prefeitura) de dentro de uma resposta
+     * ABRASF de emissão/consulta. Retorna o <CompNfse> completo (Nfse + assinatura)
+     * ou, na falta dele, o <Nfse>; null se a resposta não trouxer a nota oficial.
+     */
+    public static function nfseOficial(string $xmlResposta): ?string
+    {
+        $dom = self::parse($xmlResposta);
+
+        foreach (['CompNfse', 'Nfse'] as $tag) {
+            $nodes = $dom->getElementsByTagNameNS('*', $tag);
+
+            if ($nodes->length === 0) {
+                $nodes = $dom->getElementsByTagName($tag);
+            }
+
+            $node = $nodes->item(0);
+            if ($node !== null) {
+                return (string) $dom->saveXML($node);
+            }
+        }
+
+        return null;
+    }
+
     /** Texto de um filho (por nome local) de um elemento. */
     public static function filho(DOMElement $pai, string $localName): ?string
     {
