@@ -62,6 +62,9 @@ composer require danielbbarcelos/laravel-notas-fiscais
 php artisan vendor:publish --tag=notas-fiscais-config
 ```
 
+> **Integrando numa API?** Veja o **[Guia de integração Laravel](docs/integracao-laravel.md)** —
+> passo a passo multi-tenant/SaaS com endpoints REST, service, persistência e PDF.
+
 ## Configuração
 
 `config/notas-fiscais.php` (ou via `.env`):
