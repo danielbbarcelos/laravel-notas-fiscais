@@ -1,0 +1,18 @@
+providers:
+  - DanielBBarcelos\NotasFiscais\NotasFiscaisServiceProvider
+
+env:
+  - "APP_KEY=base64:9gAVkhTyGF1UqWpnmWcSUuinb3T4tki9vSkYm8yJPV8="
+  - "NFSE_DEMO=true"
+  # Valores dummy para o modo faked funcionar sem prefeitura real.
+  # Para testar contra o IPM real, troque por credenciais de um município.
+  - "IPM_BASE_URL=https://exemplo.atende.net/atende.php?pg=rest&service=WNERestServiceNFSe&cidade=padrao"
+  - "IPM_CPF_CNPJ=12345678000199"
+  - "IPM_SENHA=demo"
+  - "IPM_CIDADE_TOM=8055"
+  # Driver ABRASF (Pouso Alegre/MG) — valores dummy para o modo faked.
+  - "IPM_ABRASF_URL=https://pousoalegre.atende.net/?pg=services&service=WNENotaFiscalEletronicaNfe"
+  - "IPM_ABRASF_CNPJ=24100499000177"
+  - "IPM_ABRASF_SENHA=demo"
+  - "IPM_ABRASF_INSCRICAO_MUNICIPAL=84592"
+  - "IPM_ABRASF_CODIGO_IBGE=3152501"

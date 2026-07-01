@@ -1,0 +1,59 @@
+{
+    "name": "danielbbarcelos/laravel-notas-fiscais",
+    "description": "Emissão de notas fiscais de serviço (NFS-e) sob um contrato único, com drivers por provedor (IPM Atende.Net, ...). Laravel 11+.",
+    "keywords": ["laravel", "nfse", "nota-fiscal", "nfe", "fiscal", "iss", "ipm", "atende.net"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Daniel Barcelos",
+            "email": "daniel@danielbarcelos.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-dom": "*",
+        "ext-simplexml": "*",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "dompdf/dompdf": "^3.1",
+        "orchestra/testbench": "^9.0|^10.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
+    },
+    "suggest": {
+        "dompdf/dompdf": "Necessário para gerar o DANFSE em PDF via DanielBBarcelos\\NotasFiscais\\Pdf\\Danfse (^3.1)."
+    },
+    "autoload": {
+        "psr-4": {
+            "DanielBBarcelos\\NotasFiscais\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "DanielBBarcelos\\NotasFiscais\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "DanielBBarcelos\\NotasFiscais\\NotasFiscaisServiceProvider"
+            ],
+            "aliases": {
+                "NotaFiscal": "DanielBBarcelos\\NotasFiscais\\Facades\\NotaFiscal"
+            }
+        }
+    },
+    "scripts": {
+        "test": "pest"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
