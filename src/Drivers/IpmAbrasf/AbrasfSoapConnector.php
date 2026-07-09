@@ -6,6 +6,7 @@ namespace DanielBBarcelos\NotasFiscais\Drivers\IpmAbrasf;
 
 use DanielBBarcelos\NotasFiscais\Exceptions\NotaFiscalApiException;
 use DanielBBarcelos\NotasFiscais\Exceptions\NotaFiscalException;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -29,11 +30,7 @@ class AbrasfSoapConnector
     /** Envia um envelope SOAP e devolve o corpo da resposta (validado). */
     public function enviar(string $soapXml): string
     {
-        $resposta = Http::timeout((int) ($this->config['timeout'] ?? 60))
-            ->withBasicAuth(
-                (string) ($this->config['cpf_cnpj'] ?? ''),
-                (string) ($this->config['senha'] ?? ''),
-            )
+        $resposta = $this->cliente()
             ->withBody($soapXml, 'text/xml; charset=utf-8')
             ->post($this->url());
 
@@ -42,6 +39,32 @@ class AbrasfSoapConnector
         $this->validar($resposta, $corpo);
 
         return $corpo;
+    }
+
+    protected function cliente(): PendingRequest
+    {
+        $req = Http::timeout((int) ($this->config['timeout'] ?? 60))
+            ->withBasicAuth(
+                (string) ($this->config['cpf_cnpj'] ?? ''),
+                (string) ($this->config['senha'] ?? ''),
+            );
+
+        if (($proxy = $this->proxy()) !== null) {
+            $req = $req->withOptions(['proxy' => $proxy]);
+        }
+
+        return $req;
+    }
+
+    /**
+     * Proxy de saída, para municípios cujo webservice só aceita IP nacional.
+     * Formato Guzzle: "http://usuario:senha@host:porta" ou "socks5://host:porta".
+     */
+    protected function proxy(): ?string
+    {
+        $proxy = $this->config['proxy'] ?? null;
+
+        return is_string($proxy) && $proxy !== '' ? $proxy : null;
     }
 
     protected function url(): string

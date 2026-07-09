@@ -80,6 +80,28 @@ IPM_CIDADE_TOM=8055           # código TOM do município do prestador
 > A URL do Web Service varia por município. Solicite acesso no Portal do Cidadão
 > da prefeitura ("Emissão de NFS-e por WebService").
 
+### Proxy de saída (servidor fora do Brasil)
+
+Alguns municípios só respondem a requisições vindas de um IP brasileiro. Se a
+aplicação roda fora do país, aponte o driver para um proxy no Brasil:
+
+```dotenv
+IPM_PROXY=http://usuario:senha@proxy-br.exemplo.com:3128
+IPM_ABRASF_PROXY=socks5://proxy-br.exemplo.com:1080
+```
+
+Sem a variável, nada muda: a requisição sai direto do servidor. O valor é
+repassado ao Guzzle, então vale qualquer esquema que o cURL suporte
+(`http://`, `https://`, `socks5://`).
+
+Dois avisos antes de montar essa infra:
+
+- **Confirme que o bloqueio é geográfico.** Um `401 "Acesso Negado"` é problema
+  de credencial e nenhum proxy resolve — veja a seção ABRASF acima.
+- **O proxy vira ponto único de falha** no caminho da emissão. Se ele cair, as
+  notas param e cada requisição fica pendurada até o `timeout` do driver.
+  Hospedar a aplicação no Brasil elimina o problema em vez de contorná-lo.
+
 ## Uso
 
 ```php
@@ -221,6 +243,7 @@ NotaFiscal::build([
     'cpf_cnpj' => $tenant->cnpj,
     'senha'    => decrypt($tenant->ipmSenha),
     'cidade'   => $tenant->codigoTom,
+    'proxy'    => $tenant->proxy,   // opcional; null = sai direto do servidor
 ])->nfse()->emitir($nota);
 
 // Ou sobrepondo apenas alguns campos sobre a base nomeada:

@@ -125,6 +125,7 @@ return new class extends Migration {
             $table->string('codigo_ibge')->nullable();      // ABRASF
             $table->string('cidade')->nullable();           // IPM REST (código TOM)
             $table->text('link_template')->nullable();
+            $table->text('proxy')->nullable();              // cifrada (traz usuário:senha na URL)
             $table->timestamps();
         });
     }
@@ -138,7 +139,8 @@ return new class extends Migration {
 
 ### Model
 
-O cast `encrypted` garante que a **senha nunca fica em claro** no banco (usa a `APP_KEY`).
+O cast `encrypted` garante que a **senha nunca fica em claro** no banco (usa a `APP_KEY`). Vale
+para o `proxy` também: a URL costuma embutir usuário e senha.
 
 ```php
 // app/Models/NfseCredencial.php
@@ -151,11 +153,12 @@ class NfseCredencial extends Model
 {
     protected $fillable = [
         'tenant_id', 'driver', 'base_url', 'cpf_cnpj', 'senha',
-        'inscricao_municipal', 'codigo_ibge', 'cidade', 'link_template',
+        'inscricao_municipal', 'codigo_ibge', 'cidade', 'link_template', 'proxy',
     ];
 
     protected $casts = [
         'senha' => 'encrypted',
+        'proxy' => 'encrypted',
     ];
 
     public function tenant(): BelongsTo
@@ -178,6 +181,7 @@ class NfseCredencial extends Model
             'codigo_ibge'         => $this->codigo_ibge,
             'cidade'              => $this->cidade,
             'link_template'       => $this->link_template,
+            'proxy'               => $this->proxy,           // só p/ município que exige IP nacional
         ], fn ($v) => $v !== null && $v !== '');
     }
 }
@@ -745,6 +749,7 @@ GET /api/nfse/{id}/download/{xml|txt}
 | Sintoma | Causa provável | Onde olhar |
 |---|---|---|
 | `401 "Acesso Negado"` | Senha não é a **do WebService** (difere da do portal), CNPJ não habilitado p/ WebService, ou CNPJ×município descasando | `->corpo` da `NotaFiscalApiException`; README, seção ABRASF |
+| Timeout ou bloqueio **só a partir de servidor fora do Brasil** | Município aceita apenas IP nacional | Configure `proxy` na credencial do tenant (seção 3); confira antes que não é `401` de credencial |
 | `L1029` | **Competência** retroativa | Use a data atual em `competencia` |
 | `L1099` | `codigoItemListaServico` em **formato errado** | Use pontuado: `01.01.01` |
 | `L1003` | Código do item **não vinculado** ao cadastro econômico | Ajuste no cadastro do prestador na prefeitura |

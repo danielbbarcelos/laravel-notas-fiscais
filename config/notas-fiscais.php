@@ -77,6 +77,11 @@ return [
             // Código TOM (Receita Federal) do município de inscrição do prestador.
             'cidade'   => env('IPM_CIDADE_TOM'),
 
+            // Alguns municípios só aceitam requisição de IP brasileiro. Se a
+            // aplicação roda fora do país, aponte para um proxy no Brasil:
+            // "http://usuario:senha@host:3128" ou "socks5://host:1080".
+            'proxy'    => env('IPM_PROXY'),
+
             'timeout'  => (int) env('IPM_TIMEOUT', 30),
         ],
 
@@ -108,6 +113,11 @@ return [
             // https://pousoalegre.atende.net/?pg=autoatendimento#!/tipo/servico/valor/{ID}/padrao/1/load/1/identificador/{codigo}
             // (o {ID} do serviço varia por município — pegue abrindo uma NFS-e no portal).
             'link_template' => env('IPM_ABRASF_LINK_TEMPLATE'),
+
+            // Alguns municípios só aceitam requisição de IP brasileiro. Se a
+            // aplicação roda fora do país, aponte para um proxy no Brasil:
+            // "http://usuario:senha@host:3128" ou "socks5://host:1080".
+            'proxy'    => env('IPM_ABRASF_PROXY'),
 
             'timeout'  => (int) env('IPM_ABRASF_TIMEOUT', 60),
         ],
