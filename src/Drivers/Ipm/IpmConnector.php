@@ -69,11 +69,26 @@ class IpmConnector
                 (string) ($this->config['senha'] ?? ''),
             );
 
+        if (($proxy = $this->proxy()) !== null) {
+            $req = $req->withOptions(['proxy' => $proxy]);
+        }
+
         if (($sessao = $this->sessao()) !== null) {
             $req = $req->withHeaders(['Cookie' => "PHPSESSID={$sessao}"]);
         }
 
         return $req;
+    }
+
+    /**
+     * Proxy de saída, para municípios cujo webservice só aceita IP nacional.
+     * Formato Guzzle: "http://usuario:senha@host:porta" ou "socks5://host:porta".
+     */
+    protected function proxy(): ?string
+    {
+        $proxy = $this->config['proxy'] ?? null;
+
+        return is_string($proxy) && $proxy !== '' ? $proxy : null;
     }
 
     protected function sessao(): ?string
