@@ -40,6 +40,12 @@ Emissão e cancelamento reais já validados ponta a ponta. Pontos que costumam b
   prestador. Ex.: o código `10101` do portal vira `01.01.01` (zero à esquerda). Em
   formato errado → `L1099`; código não vinculado → `L1003`.
 - **CNAE (`ItemServico::codigoCnae`)** e item devem ser **coerentes** entre si.
+- **NBS (`ItemServico::codigoNbs`)**: obrigatório desde o layout **2.03**; sem ele a emissão
+  volta com `E351`. São nove dígitos da Receita Federal (ex.: `1.1403.21.10`), coerentes com
+  o item da lista de serviço. Como quase toda empresa usa um NBS fixo, o normal é configurar
+  o padrão em `IPM_ABRASF_CODIGO_NBS` e só sobrescrever por item quando precisar. Detalhes,
+  precedência e tabela de erros correlatos no
+  **[guia do código NBS](docs/codigo-nbs-abrasf.md)**.
 - **Modo teste**: o `<EnvioTeste>` exige a operação de lote síncrono, que em alguns
   municípios (Pouso Alegre) tem bug no servidor. Para validar, prefira **emitir real
   + cancelar** (a operação `GerarNfse`, usada na emissão padrão, é a estável).
@@ -75,6 +81,18 @@ IPM_BASE_URL=https://riodosul.atende.net/atende.php?pg=rest&service=WNERestServi
 IPM_CPF_CNPJ=12345678000199   # login do Web Service (prestador)
 IPM_SENHA=sua-senha
 IPM_CIDADE_TOM=8055           # código TOM do município do prestador
+```
+
+Para o driver ABRASF:
+
+```dotenv
+NFSE_DRIVER=ipm-abrasf
+IPM_ABRASF_URL=https://pousoalegre.atende.net/?pg=services&service=WNENotaFiscalEletronicaNfe
+IPM_ABRASF_CNPJ=24100499000177
+IPM_ABRASF_SENHA=sua-senha-do-webservice
+IPM_ABRASF_INSCRICAO_MUNICIPAL=84592
+IPM_ABRASF_CODIGO_IBGE=3152501
+IPM_ABRASF_CODIGO_NBS=1.0105.10.00   # obrigatório desde o layout 2.03 (erro E351)
 ```
 
 > A URL do Web Service varia por município. Solicite acesso no Portal do Cidadão

@@ -48,6 +48,7 @@ function notaAbrasf(): NotaServico
                 valorTributavel: Valor::reais('1000.00'),
                 codigoLocalPrestacao: '3152501',
                 codigoCnae: '6201501',
+                codigoNbs: '1.1403.21.10',
                 valorIss: Valor::reais('20.00'),
             ),
         ],
@@ -104,6 +105,8 @@ it('emite NFS-e via SOAP ABRASF e mapeia o retorno', function () {
             && str_contains($corpo, '<ValorIss>20.00</ValorIss>')
             && str_contains($corpo, '<ItemListaServico>10.01.01</ItemListaServico>')
             && str_contains($corpo, '<CodigoCnae>6201501</CodigoCnae>')
+            // NBS obrigatório desde o layout 2.03 (erro E351), sem pontuação e antes da Discriminacao
+            && str_contains($corpo, '<CodigoNbs>114032110</CodigoNbs><Discriminacao>')
             // prestador da config (IBGE + inscrição municipal)
             && str_contains($corpo, '<Prestador><CpfCnpj><Cnpj>24100499000177</Cnpj></CpfCnpj><InscricaoMunicipal>84592</InscricaoMunicipal></Prestador>')
             && str_contains($corpo, '<TomadorServico><IdentificacaoTomador><CpfCnpj><Cnpj>11222333000144</Cnpj>')
@@ -273,4 +276,52 @@ it('constrói o link a partir do template quando a resposta não traz link', fun
 
     expect($emitida->numero)->toBe(57)
         ->and($emitida->link)->toBe('https://pousoalegre.atende.net/?pg=autoatendimento#!/identificador/5049ABC');
+});
+
+it('usa o codigo_nbs da config quando o item não informa o seu', function () {
+    Http::fake(['*' => Http::response(respostaGerarNfse())]);
+
+    $nota = new NotaServico(
+        serie: 1,
+        dataFatoGerador: '30/06/2026',
+        valorTotal: Valor::reais('10.00'),
+        tomador: new Tomador(TipoTomador::Juridica, '11.222.333/0001-44', 'Cliente LTDA'),
+        itens: [new ItemServico('10.01.01', 'Serviço', 2.0, SituacaoTributaria::TributadaIntegralmente, Valor::reais('10.00'), '3152501')],
+    );
+
+    NotaFiscal::driver('ipm-abrasf')->nfse()->emitir($nota);
+
+    Http::assertSent(fn ($request) => str_contains($request->body(), '<CodigoNbs>101051000</CodigoNbs>'));
+});
+
+it('omite CodigoNbs quando nem o item nem a config informam um', function () {
+    config()->set('notas-fiscais.drivers.ipm-abrasf.codigo_nbs', null);
+    Http::fake(['*' => Http::response(respostaGerarNfse())]);
+
+    $nota = new NotaServico(
+        serie: 1,
+        dataFatoGerador: '30/06/2026',
+        valorTotal: Valor::reais('10.00'),
+        tomador: new Tomador(TipoTomador::Juridica, '11.222.333/0001-44', 'Cliente LTDA'),
+        itens: [new ItemServico('10.01.01', 'Serviço', 2.0, SituacaoTributaria::TributadaIntegralmente, Valor::reais('10.00'), '3152501')],
+    );
+
+    NotaFiscal::driver('ipm-abrasf')->nfse()->emitir($nota);
+
+    Http::assertSent(fn ($request) => ! str_contains($request->body(), '<CodigoNbs>'));
+});
+
+it('recusa código NBS que não tenha nove dígitos', function () {
+    Http::fake(['*' => Http::response(respostaGerarNfse())]);
+
+    $nota = new NotaServico(
+        serie: 1,
+        dataFatoGerador: '30/06/2026',
+        valorTotal: Valor::reais('10.00'),
+        tomador: new Tomador(TipoTomador::Juridica, '11.222.333/0001-44', 'Cliente LTDA'),
+        itens: [new ItemServico('10.01.01', 'Serviço', 2.0, SituacaoTributaria::TributadaIntegralmente, Valor::reais('10.00'), '3152501', codigoNbs: '1.14.03')],
+    );
+
+    expect(fn () => NotaFiscal::driver('ipm-abrasf')->nfse()->emitir($nota))
+        ->toThrow(InvalidArgumentException::class, 'Código NBS inválido');
 });

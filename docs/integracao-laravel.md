@@ -753,6 +753,9 @@ GET /api/nfse/{id}/download/{xml|txt}
 | `L1029` | **Competência** retroativa | Use a data atual em `competencia` |
 | `L1099` | `codigoItemListaServico` em **formato errado** | Use pontuado: `01.01.01` |
 | `L1003` | Código do item **não vinculado** ao cadastro econômico | Ajuste no cadastro do prestador na prefeitura |
+| `E351` | **Código NBS** não enviado (obrigatório no ABRASF desde o layout 2.03) | Configure `codigo_nbs` no driver ou passe `ItemServico::codigoNbs` — [guia do código NBS](codigo-nbs-abrasf.md) |
+| `E352` | Código NBS sem os nove dígitos | Mesmo guia; o pacote já recusa localmente com `InvalidArgumentException` |
+| `L1091` / `L1148` | NBS **incoerente** com a lista de serviço (ou com o indicador de operação) | Confira o par item × NBS no anexo `Anexo_B-NBS2-Lista_Serviço_Nacional-SNNFSe` |
 | `OperacaoNaoSuportadaException` | Documento/operação não implementado pelo driver (ex.: exportação num driver sem `ExportaArquivos`) | Confira o que o driver suporta (seções 1 e 10) |
 | `xmlNota()` devolve o RPS, não o XML oficial | `NotaEmitida` reconstruído **sem** o `bruto['xml_response']` | Persista e recarregue o `bruto` (seções 8 e 10) |
 
@@ -761,5 +764,8 @@ parseado) e `->statusHttp` — logue o `->corpo` para diagnosticar rápido.
 
 ---
 
+> Campo a campo do NBS (o que é, precedência item × config, erros da família): veja o
+> **[guia do código NBS](codigo-nbs-abrasf.md)**.
+>
 > Dúvidas sobre os detalhes fiscais/IPM (qual driver, gotchas de cadastro, link do PDF): veja o
 > **[README](../README.md)**. Este guia cobre a **integração na sua API**.

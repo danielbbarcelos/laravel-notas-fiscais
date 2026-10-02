@@ -33,6 +33,7 @@ abstract class TestCase extends Orchestra
             'senha' => 'segredo-teste',
             'inscricao_municipal' => '84592',
             'codigo_ibge' => '3152501',
+            'codigo_nbs' => '1.0105.10.00',
             'timeout' => 10,
         ]);
     }

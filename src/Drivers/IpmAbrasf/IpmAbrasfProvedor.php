@@ -47,7 +47,9 @@ class IpmAbrasfProvedor implements Provedor
     {
         return $this->nfse ??= new IpmAbrasfNfseGateway(
             http: $this->http,
-            declaracoes: new DeclaracaoMapper(),
+            declaracoes: new DeclaracaoMapper(
+                codigoNbsPadrao: isset($this->config['codigo_nbs']) ? (string) $this->config['codigo_nbs'] : null,
+            ),
             cancelamentos: new CancelamentoAbrasfMapper(),
             consultas: new ConsultaAbrasfMapper(),
             prestadorPadrao: $this->prestadorPadrao(),

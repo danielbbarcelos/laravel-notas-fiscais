@@ -34,6 +34,13 @@ final readonly class ItemServico
         // Campos do padrão ABRASF (ignorados pelo driver REST proprietário):
         /** Código CNAE do serviço. */
         public ?string $codigoCnae = null,
+        /**
+         * Código NBS do serviço (9 dígitos, com ou sem pontuação). Obrigatório
+         * no ABRASF a partir da versão 2.03 do layout; sem ele o município
+         * recusa a emissão com o erro E351. Quando null, o driver usa o
+         * "codigo_nbs" da config do provedor.
+         */
+        public ?string $codigoNbs = null,
         /** Exigibilidade do ISS (ABRASF: "1" = exigível, padrão). */
         public ?string $exigibilidadeIss = null,
         /** ISS retido pelo tomador (ABRASF: true = 1/retido, false = 2/não). */

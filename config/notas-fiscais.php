@@ -106,6 +106,13 @@ return [
             'inscricao_municipal' => env('IPM_ABRASF_INSCRICAO_MUNICIPAL'),
             'codigo_ibge'         => env('IPM_ABRASF_CODIGO_IBGE'),
 
+            // Código NBS (Nomenclatura Brasileira de Serviços) padrão do emissor:
+            // 9 dígitos, com ou sem pontuação. Obrigatório desde a versão 2.03 do
+            // layout ABRASF; sem ele o município recusa a emissão com o erro E351.
+            // Serve de default para todo ItemServico que não informe codigoNbs.
+            // Ex.: 1.0105.10.00 (serviços de desenvolvimento de software sob encomenda).
+            'codigo_nbs' => env('IPM_ABRASF_CODIGO_NBS'),
+
             // O GerarNfseResposta de alguns municípios não retorna o link do PDF.
             // Informe aqui o template da URL de consulta/autenticidade do Atende.Net,
             // com {codigo} (código de verificação) e, opcionalmente, {numero}. O driver

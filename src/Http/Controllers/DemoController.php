@@ -81,7 +81,8 @@ class DemoController
     protected function construirXml(string $padrao, NotaServico $nota, Prestador $prestador): string
     {
         if ($padrao === 'ipm-abrasf') {
-            return (new DeclaracaoMapper)->paraApi($nota, $prestador, $nota->teste);
+            return (new DeclaracaoMapper(codigoNbsPadrao: $this->configValor($padrao, 'codigo_nbs')))
+                ->paraApi($nota, $prestador, $nota->teste);
         }
 
         return (new NotaServicoMapper)->paraApi($nota, $prestador);
@@ -119,6 +120,7 @@ class DemoController
             valorTributavel: $valorTotal,
             codigoLocalPrestacao: $cidade !== '' ? $cidade : '0',
             codigoCnae: $request->input('item_cnae') ?: null,
+            codigoNbs: $request->input('item_nbs') ?: null,
             issRetido: false,
             valorIss: $valorIss,
         );

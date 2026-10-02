@@ -142,6 +142,10 @@
                         <label class="block text-xs font-semibold text-slate-500 mb-1">CNAE (ABRASF)</label>
                         <input name="item_cnae" value="{{ $old('item_cnae', '6201501') }}" class="w-full border rounded px-2 py-1 text-sm">
                     </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">NBS (ABRASF)</label>
+                        <input name="item_nbs" value="{{ $old('item_nbs', '1.0105.10.00') }}" class="w-full border rounded px-2 py-1 text-sm">
+                    </div>
                     <div class="col-span-3">
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Descritivo</label>
                         <input name="item_descritivo" value="{{ $old('item_descritivo', 'Desenvolvimento de software sob encomenda') }}" class="w-full border rounded px-2 py-1 text-sm">

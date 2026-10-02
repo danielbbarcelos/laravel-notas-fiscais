@@ -27,6 +27,15 @@ use InvalidArgumentException;
  */
 class DeclaracaoMapper
 {
+    /**
+     * @param  string|null  $codigoNbsPadrao  NBS usado quando o ItemServico não traz
+     *                                        o seu (config notas-fiscais.drivers.*.codigo_nbs).
+     */
+    public function __construct(
+        protected ?string $codigoNbsPadrao = null,
+    ) {
+    }
+
     /** Canônico -> SOAP do IPM (ABRASF). */
     public function paraApi(NotaServico $dados, ?Prestador $prestadorPadrao = null, bool $teste = false): string
     {
@@ -109,6 +118,9 @@ class DeclaracaoMapper
         if ($item->codigoCnae !== null) {
             $this->add($dom, $servico, 'CodigoCnae', $item->codigoCnae);
         }
+        if (($nbs = $this->nbs($item)) !== null) {
+            $this->add($dom, $servico, 'CodigoNbs', $nbs);
+        }
         $this->add($dom, $servico, 'Discriminacao', $item->descritivo);
         $this->add($dom, $servico, 'CodigoMunicipio', $municipio);
         $this->add($dom, $servico, 'ExigibilidadeISS', $item->exigibilidadeIss ?? '1');
@@ -185,6 +197,31 @@ class DeclaracaoMapper
             link: $link,
             bruto: ['xml_response' => $xmlResposta],
         );
+    }
+
+    /**
+     * Código NBS do item, já normalizado para os 9 dígitos que o XSD espera
+     * (<CodigoNbs> é tsCodigoNbs: 9 caracteres, sem pontuação). Cai no padrão
+     * da config quando o item não traz o seu; null quando nenhum dos dois existe,
+     * caso em que a tag é omitida e o município responde E351 se a exigir.
+     */
+    protected function nbs(ItemServico $item): ?string
+    {
+        $bruto = $item->codigoNbs ?? $this->codigoNbsPadrao;
+
+        if ($bruto === null || trim($bruto) === '') {
+            return null;
+        }
+
+        $digitos = preg_replace('/\\D/', '', $bruto) ?? '';
+
+        if (strlen($digitos) !== 9) {
+            throw new InvalidArgumentException(
+                "Código NBS inválido: \"{$bruto}\". O ABRASF exige 9 dígitos (ex.: 1.0105.10.00 ou 101051000)."
+            );
+        }
+
+        return $digitos;
     }
 
     protected function tomadorNode(DOMDocument $dom, DOMElement $inf, Tomador $t): void
