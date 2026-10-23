@@ -9,9 +9,10 @@
 
 Emissão de notas fiscais de serviço (NFS-e) sob um **contrato único**, com **drivers por provedor**. Laravel 11+.
 
-Hoje implementa o provedor **IPM Atende.Net** (NFS-e municipal) em dois padrões. A
-arquitetura de contracts é genérica para acomodar novos provedores — e, futuramente,
-outros tipos de documento (NF-e, NFC-e).
+Hoje implementa o provedor **IPM Atende.Net** (NFS-e municipal) em dois padrões e o
+**Sistema Nacional NFS-e** (Emissor Nacional / Sefin Nacional). A arquitetura de
+contracts é genérica para acomodar novos provedores — e, futuramente, outros tipos de
+documento (NF-e, NFC-e).
 
 ## Qual driver usar (IPM)
 
@@ -60,6 +61,74 @@ Emissão e cancelamento reais já validados ponta a ponta. Pontos que costumam b
   (`valor/213` é o serviço de autenticidade de NFS-e, global no Atende.Net). Confirmado
   para **Pouso Alegre/MG** (abre a nota com botões XML IPM / XML Abrasf / Imprimir):
   `https://pousoalegre.atende.net/autoatendimento/servicos/consulta-de-autenticidade-de-nota-fiscal-eletronica-nfse/detalhar/1/identificador/{codigo}`
+
+## Padrão nacional (driver `nacional`)
+
+O Sistema Nacional NFS-e recebe a **DPS** (Declaração de Prestação de Serviço, leiaute
+**v1.01**) pela API da Sefin Nacional e devolve a NFS-e na hora. Tudo muda em relação ao IPM:
+
+| | IPM (`ipm`, `ipm-abrasf`) | Nacional (`nacional`) |
+|---|---|---|
+| Autenticação | login/senha (Basic) | **mTLS com certificado A1** (ICP-Brasil) |
+| Assinatura | não há | XMLDSig (RSA-SHA1, C14N) na DPS e nos eventos |
+| Transporte | SOAP/multipart | REST + JSON, XML em GZip+Base64 (`dpsXmlGZipB64`) |
+| Quem numera | o município | **o emitente** (série + `numeroDps`) |
+| Código do serviço | LC116 `NN.NN.NN` | `cTribNac` de **6 dígitos** (item, subitem, desdobro) |
+| Identifica a nota | número + código de verificação | **chave de acesso** (50 dígitos) |
+| Cancelamento | operação própria | **evento** `e101101` em `/nfse/{chave}/eventos` |
+| Homologação | `<EnvioTeste>` (só valida) | **produção restrita** (gera NFS-e sem valor fiscal) |
+
+```php
+$gateway = NotaFiscal::build([
+    'driver'            => 'nacional',
+    'certificado'       => base64_encode(file_get_contents('a1.pfx')), // ou o caminho do .pfx
+    'certificado_senha' => $senha,
+    'cpf_cnpj'          => '24100499000177',
+    'codigo_ibge'       => '3152501',  // município emissor
+    'simples_nacional'  => 1,          // 1 não optante, 2 MEI, 3 ME/EPP
+])->nfse();
+
+$emitida = $gateway->emitir(new NotaServico(
+    serie: 1,
+    numeroDps: $minhaSequencia,        // obrigatório: único por CNPJ + série
+    dataFatoGerador: '30/06/2026',
+    valorTotal: Valor::reais('1000.00'),
+    tomador: $tomador,
+    itens: [new ItemServico(codigoItemListaServico: '01.07.01', /* ... */)],
+    teste: false,                      // true = produção restrita (tpAmb 2)
+));
+
+$emitida->codigoVerificacao; // a chave de acesso, que consulta e cancela
+$emitida->link;              // consulta pública: nfse.gov.br/ConsultaPublica
+$emitida->bruto['xml_nfse']; // a NFS-e oficial assinada pela Sefin
+
+$gateway->consultarPorAutenticidade($chave);
+$gateway->cancelar(new Cancelamento(numero: 126, serie: 1, chaveAcesso: $chave,
+    motivo: 'Valor do serviço informado errado')); // 15 a 255 caracteres
+```
+
+O que o driver já resolve sozinho, e por quê:
+
+- **Reenvio da mesma DPS (E0014).** Se a primeira tentativa passou e a resposta se perdeu,
+  reenviar o mesmo `numeroDps` recupera a NFS-e já gerada (`GET /dps/{id}` e `GET /nfse/{chave}`)
+  em vez de falhar. Quando a nota recuperada tem outro valor ou outro tomador, o número já foi
+  usado por outra emissão do mesmo CNPJ e o driver lança, em vez de devolver a nota alheia.
+- **Nome e IM do prestador não vão na DPS** (E0121 e E0120): a Sefin os conhece pelo cadastro
+  nacional. Ligue `informar_inscricao_municipal` só se o município registrou a IM lá.
+- **Alíquota (`pAliq`).** Com o município de incidência conveniado, a Sefin aplica a alíquota
+  parametrizada e **rejeita** a informada; sem convênio, ela é obrigatória. O ME/EPP que apura
+  ISS pelo Simples só informa quando há retenção. Ajuste `municipio_conveniado` se for o caso.
+- **Total de tributos (`totTrib`).** Não optante vai com percentuais (0,00 quando não
+  configurados); ME/EPP com `tributos_simples` vai em `pTotTribSN`; MEI vai com `indTotTrib`.
+- **`dhEmi` um minuto para trás**, porque a Sefin rejeita emissão posterior ao processamento.
+
+Fora do v1: grupo IBS/CBS da reforma tributária (opcional no leiaute v1.01), substituição de
+NFS-e, DANFSE oficial (o PDF do pacote, `ComprovanteNfse`, continua servindo de comprovante) e o
+TXT de exportação, que é um layout do IPM. Consulta por número não existe neste padrão:
+`consultar()` lança e indica `consultarPorAutenticidade()`.
+
+Leiaute, regras de negócio e XSD oficiais em [`docs/nfse-nacional/`](docs/nfse-nacional/). A
+OpenSSL 3 do sistema precisa permitir assinatura SHA-1 (o padrão do Ubuntu permite).
 
 ## Instalação
 

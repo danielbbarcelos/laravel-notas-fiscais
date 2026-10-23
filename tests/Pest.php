@@ -10,4 +10,5 @@ uses(TestCase::class)->in('Abrasf');
 uses(TestCase::class)->in('Export');
 uses(TestCase::class)->in('Integracao');
 uses(TestCase::class)->in('Proxy');
+uses(TestCase::class)->in('Nacional');
 uses(DemoTestCase::class)->in('Demo');

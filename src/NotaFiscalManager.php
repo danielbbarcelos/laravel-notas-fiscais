@@ -9,6 +9,7 @@ use DanielBBarcelos\NotasFiscais\Contracts\NfseGateway;
 use DanielBBarcelos\NotasFiscais\Contracts\Provedor;
 use DanielBBarcelos\NotasFiscais\Drivers\Ipm\IpmProvedor;
 use DanielBBarcelos\NotasFiscais\Drivers\IpmAbrasf\IpmAbrasfProvedor;
+use DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalProvedor;
 use DanielBBarcelos\NotasFiscais\Exceptions\NotaFiscalException;
 use Illuminate\Contracts\Container\Container;
 
@@ -138,5 +139,8 @@ class NotaFiscalManager
 
         // Driver ABRASF 2.04 (SOAP, WNENotaFiscalEletronicaNfe) — ex.: Pouso Alegre/MG.
         $this->extend('ipm-abrasf', fn (array $config, string $nome) => new IpmAbrasfProvedor($config, $nome));
+
+        // Sistema Nacional NFS-e (Sefin Nacional, leiaute v1.01): REST + mTLS com certificado A1.
+        $this->extend('nacional', fn (array $config, string $nome) => new NacionalProvedor($config, $nome));
     }
 }
