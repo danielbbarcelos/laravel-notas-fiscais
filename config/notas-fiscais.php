@@ -129,6 +129,64 @@ return [
             'timeout'  => (int) env('IPM_ABRASF_TIMEOUT', 60),
         ],
 
+
+        /*
+        | Sistema Nacional NFS-e (Emissor Nacional / API da Sefin Nacional),
+        | leiaute DPS v1.01. Autenticação por mTLS com o certificado A1 (ICP-Brasil)
+        | do emitente, o mesmo que assina a DPS e os eventos. Não há senha de
+        | prefeitura. Quem numera é o emitente: passe NotaServico::numeroDps.
+        */
+        'nacional' => [
+            'driver' => 'nacional',
+
+            // 1/"producao" ou 2/"homologacao" (produção restrita). NotaServico::teste
+            // força a produção restrita na emissão, qualquer que seja este valor.
+            'ambiente' => env('NFSE_NACIONAL_AMBIENTE', 'producao'),
+
+            // Certificado A1: bytes do .pfx, o mesmo em Base64 ou o caminho do arquivo.
+            'certificado'       => env('NFSE_NACIONAL_CERTIFICADO'),
+            'certificado_senha' => env('NFSE_NACIONAL_CERTIFICADO_SENHA'),
+
+            // Prestador: CPF/CNPJ (o do certificado) e o IBGE (7) do município emissor.
+            'cpf_cnpj'    => env('NFSE_NACIONAL_CNPJ'),
+            'codigo_ibge' => env('NFSE_NACIONAL_CODIGO_IBGE'),
+
+            // A IM só vai na DPS quando o município a registrou no cadastro nacional;
+            // fora disso a Sefin rejeita com E0120. Por isso desligado por padrão.
+            'inscricao_municipal'          => env('NFSE_NACIONAL_INSCRICAO_MUNICIPAL'),
+            'informar_inscricao_municipal' => (bool) env('NFSE_NACIONAL_INFORMAR_IM', false),
+
+            // Regime do emitente (prest/regTrib):
+            //  simples_nacional: 1 não optante, 2 MEI, 3 ME/EPP;
+            //  regime_apuracao_simples (só ME/EPP): 1 tudo pelo SN, 2 ISS fora, 3 tudo fora;
+            //  regime_especial: 0 nenhum, 1 cooperativa, 2 estimativa, 3 ME municipal,
+            //  4 notário, 5 autônomo, 6 sociedade de profissionais, 9 outros.
+            'simples_nacional'        => env('NFSE_NACIONAL_SIMPLES', 1),
+            'regime_apuracao_simples' => env('NFSE_NACIONAL_APURACAO_SN', 1),
+            'regime_especial'         => env('NFSE_NACIONAL_REGIME_ESPECIAL', 0),
+
+            // Município de incidência conveniado ao Sistema Nacional: com convênio a
+            // Sefin aplica a alíquota parametrizada e rejeita a informada.
+            'municipio_conveniado' => (bool) env('NFSE_NACIONAL_CONVENIADO', true),
+
+            // Total aproximado de tributos (Lei 12.741), em %. ME/EPP usa
+            // tributos_simples; os demais, os três entes (0,00 quando vazios).
+            'tributos_federais'   => env('NFSE_NACIONAL_TRIBUTOS_FEDERAIS'),
+            'tributos_estaduais'  => env('NFSE_NACIONAL_TRIBUTOS_ESTADUAIS'),
+            'tributos_municipais' => env('NFSE_NACIONAL_TRIBUTOS_MUNICIPAIS'),
+            'tributos_simples'    => env('NFSE_NACIONAL_TRIBUTOS_SIMPLES'),
+
+            // NBS padrão (9 dígitos), para itens que não informem codigoNbs.
+            'codigo_nbs' => env('NFSE_NACIONAL_CODIGO_NBS'),
+
+            // Sobrescreve as URLs da Sefin (municípios com Sefin própria no padrão).
+            'base_url'             => env('NFSE_NACIONAL_URL'),
+            'base_url_homologacao' => env('NFSE_NACIONAL_URL_HOMOLOGACAO'),
+
+            'proxy'   => env('NFSE_NACIONAL_PROXY'),
+            'timeout' => (int) env('NFSE_NACIONAL_TIMEOUT', 60),
+        ],
+
     ],
 
 ];

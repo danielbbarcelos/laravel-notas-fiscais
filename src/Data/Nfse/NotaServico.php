@@ -53,6 +53,13 @@ final readonly class NotaServico
         public bool $optanteSimplesNacional = true,
         /** Incentivo fiscal (ABRASF: true = 1, false = 2/padrão). */
         public bool $incentivoFiscal = false,
+        // Campos do padrão nacional (ignorados pelos drivers IPM):
+        /**
+         * Número da DPS (1 a 15 dígitos), único por emitente e série. No padrão
+         * nacional quem numera é o emitente, não o município: reenviar o mesmo
+         * número devolve a NFS-e já gerada em vez de criar outra.
+         */
+        public ?int $numeroDps = null,
     ) {
     }
 }
