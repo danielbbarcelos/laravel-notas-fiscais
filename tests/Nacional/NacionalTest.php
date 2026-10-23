@@ -318,8 +318,7 @@ it('rejeição vira NotaFiscalApiException com todos os códigos na mensagem', f
     } catch (NotaFiscalApiException $e) {
         expect($e->codigo)->toBe('E0312')
             ->and($e->statusHttp)->toBe(400)
-            ->and($e->getMessage())->toContain('E0312: Código de tributação nacional inexistente.')
-            ->and($e->getMessage())->toContain('E0625: Alíquota não deve ser informada. (convênio ativo)');
+            ->and($e->getMessage())->toBe('[nacional] Erro E0312: Código de tributação nacional inexistente. | E0625: Alíquota não deve ser informada. (convênio ativo)');
     }
 });
 

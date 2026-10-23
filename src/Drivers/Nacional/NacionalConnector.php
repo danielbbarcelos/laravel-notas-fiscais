@@ -145,8 +145,11 @@ class NacionalConnector
             $descricao = (string) ($item['Descricao'] ?? $item['descricao'] ?? '');
             $complemento = (string) ($item['Complemento'] ?? $item['complemento'] ?? '');
 
+            $texto = trim($descricao.($complemento !== '' ? " ({$complemento})" : ''));
+
+            // O primeiro já vai prefixado pela exceção ("Erro E0312: ..."); os demais levam o código.
+            $mensagens[] = $codigos === [] ? $texto : "{$codigo}: {$texto}";
             $codigos[] = $codigo;
-            $mensagens[] = trim($codigo.': '.$descricao.($complemento !== '' ? " ({$complemento})" : ''));
         }
 
         if ($codigos === []) {
