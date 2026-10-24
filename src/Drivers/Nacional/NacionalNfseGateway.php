@@ -164,7 +164,9 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
      */
     public static function lerConveniado(array $json): ?bool
     {
-        foreach (['aderenteEmissorNacional', 'aderenteAmbienteNacional', 'conveniado', 'convenioAtivo', 'situacaoConvenio'] as $campo) {
+        // aderenteEmissorNacional fica de fora: diz se o município usa o emissor web
+        // público, não se o convênio (que decide a alíquota na DPS) está ativo.
+        foreach (['convenioAtivo', 'conveniado', 'situacaoConvenio', 'aderenteAmbienteNacional'] as $campo) {
             $valor = self::procurar($json, $campo);
 
             if ($valor !== null) {
@@ -255,10 +257,12 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
     }
 
     /**
-     * A NFS-e recuperada pelo Id da DPS precisa ser a desta emissão. Se valor ou
-     * tomador divergem, o número da DPS já foi usado por outra nota do mesmo
-     * emitente e série (outra instalação, outro sistema): devolver a nota alheia
-     * como se fosse esta seria pior que falhar.
+     * A NFS-e recuperada pelo Id da DPS precisa ser a desta emissão. Se valor,
+     * tomador, código do serviço ou descrição divergem, devolvê-la como se fosse
+     * esta seria pior que falhar: ou o número foi usado por outra nota do mesmo
+     * emitente e série (outra instalação), ou é a primeira tentativa desta mesma
+     * nota, que passou com dados que o reprocessamento mudou. Nos dois casos a
+     * mensagem traz a chave da nota que existe, para ela ser consultada ou cancelada.
      */
     protected function conferirRecuperada(\DOMDocument $dps, ?string $xmlNfse, string $idDps): void
     {
@@ -272,9 +276,19 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
         $tomadorNfse = ($t = $nfse->getElementsByTagNameNS('*', 'toma')->item(0)) instanceof \DOMElement
             ? (NacionalXml::texto($t, 'CNPJ') ?? NacionalXml::texto($t, 'CPF')) : null;
 
-        if (NacionalXml::texto($dps, 'vServ') !== NacionalXml::texto($nfse, 'vServ') || $tomadorDps !== $tomadorNfse) {
+        $campos = ['vServ', 'cTribNac', 'xDescServ'];
+        $diverge = $tomadorDps !== $tomadorNfse;
+
+        foreach ($campos as $campo) {
+            $diverge = $diverge || NacionalXml::texto($dps, $campo) !== NacionalXml::texto($nfse, $campo);
+        }
+
+        if ($diverge) {
+            $id = NacionalXml::atributo($nfse, 'infNFSe', 'Id');
+            $chave = $id !== null ? substr(NacionalXml::digitos($id), 0, 50) : '?';
+
             throw new NotaFiscalException(
-                "A DPS {$idDps} já foi usada por outra NFS-e deste emitente, com outro valor ou tomador. Use outra série ou outro número de DPS."
+                "A DPS {$idDps} já gerou uma NFS-e com outros dados (chave {$chave}). Consulte essa nota e, se for o caso, cancele-a antes de emitir de novo."
             );
         }
     }

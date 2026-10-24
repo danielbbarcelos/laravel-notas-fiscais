@@ -143,8 +143,11 @@ return [
             // força a produção restrita na emissão, qualquer que seja este valor.
             'ambiente' => env('NFSE_NACIONAL_AMBIENTE', 'producao'),
 
-            // Certificado A1: bytes do .pfx, o mesmo em Base64 ou o caminho do arquivo.
-            'certificado'       => env('NFSE_NACIONAL_CERTIFICADO'),
+            // Certificado A1: o conteúdo (bytes do .pfx ou Base64), que uma aplicação
+            // multi-tenant guarda por cliente, ou o caminho do arquivo no servidor. São
+            // chaves separadas: o conteúdo nunca é lido como caminho.
+            'certificado'         => env('NFSE_NACIONAL_CERTIFICADO'),
+            'certificado_arquivo' => env('NFSE_NACIONAL_CERTIFICADO_ARQUIVO'),
             'certificado_senha' => env('NFSE_NACIONAL_CERTIFICADO_SENHA'),
 
             // Prestador: CPF/CNPJ (o do certificado) e o IBGE (7) do município emissor.
