@@ -11,6 +11,7 @@ Cópia da documentação técnica publicada em
 | `anexo_ii-…-pedregevt_evt-….xlsx` | Leiaute e regras dos eventos (cancelamento e101101). |
 | `manual-contribuintes-emissor-publico-api-….pdf` | Endpoints da API da Sefin Nacional. |
 | `manual-contribuintes-apis-adn-….pdf` | Endpoints do ADN (distribuição e eventos). |
+| `nt-008-se-cgnfse-danfse-20260714-v1-02.pdf` | Especificação do DANFSe v2.0 (Anexo I é o modelo seguido por `Pdf\Danfse`). |
 
 O Swagger das APIs (`sefin.nfse.gov.br/SefinNacional/docs`) só abre com certificado
 ICP-Brasil (mTLS); sem ele responde 403.

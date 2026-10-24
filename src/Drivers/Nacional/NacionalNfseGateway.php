@@ -114,6 +114,106 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
         return $this->dps->paraDominio($json, $this->xmlNfse($json));
     }
 
+    /**
+     * Situação do convênio do município com o Sistema Nacional (GET
+     * /parametros_municipais/{cMun}/convenio). Decide se a alíquota vai na DPS:
+     * com convênio ativo a Sefin aplica a parametrizada e rejeita a informada.
+     *
+     * O Swagger da Sefin só abre com certificado, e o formato da resposta não está
+     * nos manuais públicos: "conveniado" é lido de forma defensiva e o JSON
+     * original volta em "bruto" para quem precisar de outro campo.
+     *
+     * @return array{conveniado: ?bool, bruto: array<string, mixed>}
+     */
+    public function consultarConvenio(string $codigoIbge): array
+    {
+        $ibge = NacionalXml::digitos($codigoIbge);
+
+        if (strlen($ibge) !== 7) {
+            throw new NotaFiscalException("Código IBGE inválido: \"{$codigoIbge}\" (são 7 dígitos).");
+        }
+
+        $json = $this->http->consultar("/parametros_municipais/{$ibge}/convenio", $this->ambiente);
+
+        return ['conveniado' => self::lerConveniado($json), 'bruto' => $json];
+    }
+
+    /**
+     * Alíquota parametrizada pelo município para um código de tributação
+     * nacional (GET /parametros_municipais/{cMun}/{cTribNac}). Mesma ressalva de
+     * formato de consultarConvenio(): a alíquota é procurada pelo nome do campo.
+     *
+     * @return array{aliquota: ?float, bruto: array<string, mixed>}
+     */
+    public function consultarAliquota(string $codigoIbge, string $codigoTributacaoNacional): array
+    {
+        $ibge = NacionalXml::digitos($codigoIbge);
+        $codigo = NacionalXml::digitos($codigoTributacaoNacional);
+
+        if (strlen($ibge) !== 7 || strlen($codigo) !== 6) {
+            throw new NotaFiscalException('Consulta de alíquota exige o IBGE (7 dígitos) e o código de tributação nacional (6 dígitos).');
+        }
+
+        $json = $this->http->consultar("/parametros_municipais/{$ibge}/{$codigo}", $this->ambiente);
+
+        return ['aliquota' => self::lerAliquota($json), 'bruto' => $json];
+    }
+
+    /**
+     * @param  array<mixed>  $json
+     */
+    public static function lerConveniado(array $json): ?bool
+    {
+        foreach (['aderenteEmissorNacional', 'aderenteAmbienteNacional', 'conveniado', 'convenioAtivo', 'situacaoConvenio'] as $campo) {
+            $valor = self::procurar($json, $campo);
+
+            if ($valor !== null) {
+                return in_array(strtolower((string) $valor), ['1', 'true', 's', 'sim', 'ativo'], true);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<mixed>  $json
+     */
+    public static function lerAliquota(array $json): ?float
+    {
+        foreach (['aliquota', 'Aliq', 'aliq', 'pAliq', 'valorAliquota'] as $campo) {
+            $valor = self::procurar($json, $campo);
+
+            if (is_numeric($valor)) {
+                return (float) $valor;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Primeiro valor escalar com a chave informada, em qualquer profundidade
+     * (comparação sem diferenciar maiúsculas).
+     *
+     * @param  array<mixed>  $json
+     */
+    private static function procurar(array $json, string $chave): mixed
+    {
+        foreach ($json as $k => $v) {
+            if (is_string($k) && strcasecmp($k, $chave) === 0 && is_scalar($v)) {
+                return $v;
+            }
+        }
+
+        foreach ($json as $v) {
+            if (is_array($v) && ($achado = self::procurar($v, $chave)) !== null) {
+                return $achado;
+            }
+        }
+
+        return null;
+    }
+
     public function xmlNota(NotaServico $dados, ?NotaEmitida $emitida = null): string
     {
         // A NFS-e oficial (assinada pela Sefin), quando veio na emissão ou na consulta.
