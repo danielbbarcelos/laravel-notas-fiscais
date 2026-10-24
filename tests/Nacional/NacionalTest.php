@@ -101,13 +101,13 @@ function notaNacional(array $sobrescrever = []): NotaServico
 }
 
 /** NFS-e devolvida pela Sefin (só as tags que o mapper lê). */
-function nfseNacionalXml(string $numero = '126', string $vServ = '1000.00', string $tomador = '11222333000144'): string
+function nfseNacionalXml(string $numero = '126', string $vServ = '1000.00', string $tomador = '11222333000144', string $cTribNac = '010701'): string
 {
     $chave = CHAVE_NACIONAL;
 
     return <<<XML
     <?xml version="1.0" encoding="UTF-8"?>
-    <NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01"><infNFSe Id="NFS{$chave}"><nNFSe>{$numero}</nNFSe><dhProc>2026-06-30T14:05:09-03:00</dhProc><DPS versao="1.01"><infDPS Id="DPS315250122410049900017700001000000000000042"><serie>1</serie><toma><CNPJ>{$tomador}</CNPJ></toma><valores><vServPrest><vServ>{$vServ}</vServ></vServPrest></valores></infDPS></DPS></infNFSe></NFSe>
+    <NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01"><infNFSe Id="NFS{$chave}"><nNFSe>{$numero}</nNFSe><dhProc>2026-06-30T14:05:09-03:00</dhProc><DPS versao="1.01"><infDPS Id="DPS315250122410049900017700001000000000000042"><serie>1</serie><toma><CNPJ>{$tomador}</CNPJ></toma><serv><cServ><cTribNac>{$cTribNac}</cTribNac><xDescServ>Suporte técnico em informática</xDescServ></cServ></serv><valores><vServPrest><vServ>{$vServ}</vServ></vServPrest></valores></infDPS></DPS></infNFSe></NFSe>
     XML;
 }
 
@@ -263,7 +263,7 @@ it('teste (homologação) vai para a produção restrita com tpAmb 2', function 
         && str_contains(xmlEnviado($request, 'dpsXmlGZipB64'), '<tpAmb>2</tpAmb>'));
 });
 
-it('usa o certificado no mTLS da conexão', function () {
+it('usa o certificado no mTLS em memória, sem gravar a chave em disco', function () {
     $opcoes = null;
 
     Http::fake(function (Request $request, array $options) use (&$opcoes) {
@@ -272,19 +272,26 @@ it('usa o certificado no mTLS da conexão', function () {
         return Http::response(respostaEmissaoNacional(), 201);
     });
 
-    // O provedor guarda os arquivos temporários do mTLS enquanto existir.
-    $provedor = NotaFiscal::build(configNacional());
-    $provedor->nfse()->emitir(notaNacional());
+    NotaFiscal::build(configNacional())->nfse()->emitir(notaNacional());
 
-    expect($opcoes['cert'] ?? null)->toBeString()
-        ->and(file_get_contents($opcoes['cert']))->toContain('BEGIN CERTIFICATE')
-        ->and(file_get_contents($opcoes['ssl_key']))->toContain('PRIVATE KEY')
-        ->and(substr(sprintf('%o', fileperms($opcoes['ssl_key'])), -4))->toBe('0600');
+    expect($opcoes['curl'][CURLOPT_SSLCERT_BLOB] ?? null)->toContain('BEGIN CERTIFICATE')
+        ->and($opcoes['curl'][CURLOPT_SSLKEY_BLOB] ?? null)->toContain('PRIVATE KEY')
+        ->and($opcoes)->not->toHaveKey('cert')
+        ->and($opcoes)->not->toHaveKey('ssl_key');
+});
 
-    unset($provedor);
-    gc_collect_cycles();
+it('não lê como caminho de arquivo um certificado que veio no conteúdo', function () {
+    $arquivo = tempnam(sys_get_temp_dir(), 'pfx_');
+    file_put_contents($arquivo, base64_decode(pfxDeTeste()));
 
-    expect(file_exists($opcoes['ssl_key']))->toBeFalse();
+    expect(fn () => NotaFiscal::build(configNacional(['certificado' => $arquivo]))->nfse())
+        ->toThrow(NotaFiscalException::class, 'senha incorreta ou arquivo');
+
+    // O caminho só vale pela chave própria, do cenário single-tenant.
+    expect(NotaFiscal::build(configNacional(['certificado' => null, 'certificado_arquivo' => $arquivo]))->nfse())
+        ->toBeInstanceOf(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::class);
+
+    @unlink($arquivo);
 });
 
 it('reenvio da mesma DPS (E0014) recupera a NFS-e já gerada em vez de falhar', function () {
@@ -301,7 +308,14 @@ it('E0014 com outra nota no mesmo número (valor ou tomador diferente) falha em 
     Http::fake(fakeDpsDuplicada(nfseNacionalXml(vServ: '250.00')));
 
     expect(fn () => NotaFiscal::build(configNacional())->nfse()->emitir(notaNacional()))
-        ->toThrow(NotaFiscalException::class, 'já foi usada por outra NFS-e');
+        ->toThrow(NotaFiscalException::class, 'já gerou uma NFS-e com outros dados (chave '.CHAVE_NACIONAL.')');
+});
+
+it('E0014 de uma primeira tentativa com outro código de serviço falha em vez de aceitar a nota antiga', function () {
+    Http::fake(fakeDpsDuplicada(nfseNacionalXml(cTribNac: '010501')));
+
+    expect(fn () => NotaFiscal::build(configNacional())->nfse()->emitir(notaNacional()))
+        ->toThrow(NotaFiscalException::class, 'já gerou uma NFS-e com outros dados');
 });
 
 it('rejeição vira NotaFiscalApiException com todos os códigos na mensagem', function () {
@@ -465,7 +479,7 @@ it('ME/EPP vai com regApTribSN e pTotTribSN, válido no XSD', function () {
 it('consulta o convênio do município e lê a adesão em formatos diferentes', function () {
     Http::fake([NacionalConnector::URL_PRODUCAO.'/parametros_municipais/3152501/convenio' => Http::response([
         'mensagem' => 'OK',
-        'parametrosConvenio' => ['aderenteAmbienteNacional' => 1, 'aderenteEmissorNacional' => 1],
+        'parametrosConvenio' => ['aderenteAmbienteNacional' => 1, 'aderenteEmissorNacional' => 0],
     ], 200)]);
 
     $resultado = NotaFiscal::build(configNacional())->nfse()->consultarConvenio('3152501');
@@ -473,7 +487,7 @@ it('consulta o convênio do município e lê a adesão em formatos diferentes', 
     expect($resultado['conveniado'])->toBeTrue()
         ->and($resultado['bruto']['mensagem'])->toBe('OK');
 
-    expect(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::lerConveniado(['dados' => ['aderenteEmissorNacional' => 0]]))->toBeFalse()
+    expect(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::lerConveniado(['dados' => ['aderenteAmbienteNacional' => 0]]))->toBeFalse()
         ->and(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::lerConveniado(['outro' => 'x']))->toBeNull();
 });
 

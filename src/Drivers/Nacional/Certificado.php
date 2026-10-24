@@ -11,10 +11,15 @@ use DanielBBarcelos\NotasFiscais\Exceptions\NotaFiscalException;
  * O padrão nacional usa o mesmo certificado duas vezes: na conexão (mTLS) e na
  * assinatura XMLDSig da DPS e dos pedidos de evento.
  *
- * O conteúdo pode chegar como os bytes do arquivo, em Base64 (o jeito natural de
- * guardá-lo cifrado num banco) ou como caminho de arquivo. A chave privada nunca
- * sai daqui em claro, exceto pelos arquivos temporários que o Guzzle exige para o
- * mTLS, apagados no fim do processo.
+ * O conteúdo chega como os bytes do arquivo ou em Base64 (o jeito natural de
+ * guardá-lo cifrado num banco). Ler de um caminho é outra porta, doArquivo(), de
+ * propósito: o conteúdo costuma vir de um formulário, e aceitar caminho ali deixaria
+ * quem configura apontar para qualquer .pfx do servidor.
+ *
+ * A chave privada não vai para o disco: o mTLS recebe certificado e chave em
+ * memória (CURLOPT_SSLCERT_BLOB / CURLOPT_SSLKEY_BLOB). Só sem esse suporte no
+ * curl ela cai num arquivo temporário 0600, apagado no destrutor e também no
+ * shutdown do processo, para não sobrar em /tmp se a requisição morrer no meio.
  */
 final class Certificado
 {
@@ -32,11 +37,30 @@ final class Certificado
     }
 
     /**
-     * @param  string  $conteudo  bytes do .pfx, o mesmo em Base64, ou o caminho do arquivo
+     * @param  string  $conteudo  bytes do .pfx ou o mesmo em Base64 (nunca um caminho)
      */
     public static function doPfx(string $conteudo, string $senha): self
     {
         $bytes = self::bytes($conteudo);
+        $lido = [];
+
+        if (! openssl_pkcs12_read($bytes, $lido, $senha)) {
+            throw new NotaFiscalException(
+                'Não foi possível abrir o certificado digital: senha incorreta ou arquivo que não é um PKCS#12 (.pfx).'
+            );
+        }
+
+        return new self((string) $lido['cert'], (string) $lido['pkey']);
+    }
+
+    /** Lê o .pfx de um caminho do servidor (config da aplicação, testes), nunca de dado do usuário. */
+    public static function doArquivo(string $caminho, string $senha): self
+    {
+        if (! is_file($caminho) || ! is_readable($caminho)) {
+            throw new NotaFiscalException("Arquivo de certificado não encontrado: {$caminho}");
+        }
+
+        $bytes = (string) file_get_contents($caminho);
         $lido = [];
 
         if (! openssl_pkcs12_read($bytes, $lido, $senha)) {
@@ -79,8 +103,28 @@ final class Certificado
     }
 
     /**
+     * Opções do Guzzle para o mTLS: certificado e chave em memória quando o curl
+     * suporta (libcurl 7.71+), senão em arquivos temporários.
+     *
+     * @return array<string, mixed>
+     */
+    public function opcoesMtls(): array
+    {
+        if (defined('CURLOPT_SSLCERT_BLOB') && defined('CURLOPT_SSLKEY_BLOB')) {
+            return ['curl' => [
+                CURLOPT_SSLCERT_BLOB => $this->certificadoPem,
+                CURLOPT_SSLCERTTYPE => 'PEM',
+                CURLOPT_SSLKEY_BLOB => $this->chavePrivadaPem,
+                CURLOPT_SSLKEYTYPE => 'PEM',
+            ]];
+        }
+
+        return $this->arquivosMtls();
+    }
+
+    /**
      * Caminhos de arquivo do certificado e da chave, no formato que o Guzzle
-     * aceita em 'cert' e 'ssl_key'.
+     * aceita em 'cert' e 'ssl_key'. Fallback de opcoesMtls().
      *
      * @return array{cert: string, ssl_key: string}
      */
@@ -111,6 +155,11 @@ final class Certificado
         file_put_contents($arquivo, $conteudo);
         $this->temporarios[] = $arquivo;
 
+        // O destrutor não roda num fatal error ou num timeout de execução: o shutdown roda.
+        register_shutdown_function(static function () use ($arquivo): void {
+            @unlink($arquivo);
+        });
+
         return $arquivo;
     }
 
@@ -118,11 +167,6 @@ final class Certificado
     {
         if ($conteudo === '') {
             throw new NotaFiscalException('Certificado digital não informado.');
-        }
-
-        // Um caminho é curto e sem quebra; o conteúdo de um .pfx nunca é.
-        if (strlen($conteudo) < 4096 && ! str_contains($conteudo, "\0") && is_file($conteudo)) {
-            return (string) file_get_contents($conteudo);
         }
 
         // PKCS#12 em DER começa por SEQUENCE (0x30); Base64 é só ASCII.

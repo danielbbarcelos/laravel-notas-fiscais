@@ -69,7 +69,7 @@ class NacionalConnector
 
     protected function cliente(): PendingRequest
     {
-        $opcoes = $this->certificado->arquivosMtls();
+        $opcoes = $this->certificado->opcoesMtls();
 
         if (($proxy = $this->proxy()) !== null) {
             $opcoes['proxy'] = $proxy;

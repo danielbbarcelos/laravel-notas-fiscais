@@ -81,7 +81,7 @@ O Sistema Nacional NFS-e recebe a **DPS** (Declaração de Prestação de Servi�
 ```php
 $gateway = NotaFiscal::build([
     'driver'            => 'nacional',
-    'certificado'       => base64_encode(file_get_contents('a1.pfx')), // ou o caminho do .pfx
+    'certificado'       => base64_encode(file_get_contents('a1.pfx')), // ou 'certificado_arquivo' => '/caminho/a1.pfx'
     'certificado_senha' => $senha,
     'cpf_cnpj'          => '24100499000177',
     'codigo_ibge'       => '3152501',  // município emissor

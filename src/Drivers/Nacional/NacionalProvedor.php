@@ -73,17 +73,30 @@ class NacionalProvedor implements Provedor
         };
     }
 
+    /**
+     * 'certificado' é o conteúdo (bytes ou Base64), o que uma aplicação multi-tenant
+     * guarda por cliente. 'certificado_arquivo' é um caminho do servidor, para o
+     * cenário single-tenant do .env: chaves separadas para que um conteúdo vindo de
+     * formulário nunca seja lido como caminho.
+     */
     protected function certificado(): Certificado
     {
+        $senha = (string) ($this->config['certificado_senha'] ?? '');
         $pfx = $this->config['certificado'] ?? null;
 
-        if (! is_string($pfx) || $pfx === '') {
-            throw new NotaFiscalException(
-                "Provedor [{$this->nome}] sem 'certificado': o padrão nacional exige o certificado A1 (.pfx) do emitente."
-            );
+        if (is_string($pfx) && $pfx !== '') {
+            return Certificado::doPfx($pfx, $senha);
         }
 
-        return Certificado::doPfx($pfx, (string) ($this->config['certificado_senha'] ?? ''));
+        $arquivo = $this->config['certificado_arquivo'] ?? null;
+
+        if (is_string($arquivo) && $arquivo !== '') {
+            return Certificado::doArquivo($arquivo, $senha);
+        }
+
+        throw new NotaFiscalException(
+            "Provedor [{$this->nome}] sem 'certificado': o padrão nacional exige o certificado A1 (.pfx) do emitente."
+        );
     }
 
     protected function optanteSimples(): ?bool

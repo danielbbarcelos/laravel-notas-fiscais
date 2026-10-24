@@ -50,7 +50,7 @@ it('emite e cancela na produção restrita do padrão nacional', function () {
     $config = [
         'driver' => 'nacional',
         'ambiente' => 'homologacao',
-        'certificado' => envNacional('NFSE_NACIONAL_CERTIFICADO'),
+        'certificado_arquivo' => envNacional('NFSE_NACIONAL_CERTIFICADO'),
         'certificado_senha' => envNacional('NFSE_NACIONAL_CERTIFICADO_SENHA'),
         'cpf_cnpj' => envNacional('NFSE_NACIONAL_CNPJ'),
         'codigo_ibge' => $ibge,
