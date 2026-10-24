@@ -122,9 +122,39 @@ O que o driver já resolve sozinho, e por quê:
   configurados); ME/EPP com `tributos_simples` vai em `pTotTribSN`; MEI vai com `indTotTrib`.
 - **`dhEmi` um minuto para trás**, porque a Sefin rejeita emissão posterior ao processamento.
 
-Fora do v1: grupo IBS/CBS da reforma tributária (opcional no leiaute v1.01), substituição de
-NFS-e, DANFSE oficial (o PDF do pacote, `ComprovanteNfse`, continua servindo de comprovante) e o
-TXT de exportação, que é um layout do IPM. Consulta por número não existe neste padrão:
+### DANFSe (NT 008/2026)
+
+Desde 03/08/2026 a API do ADN que devolvia o DANFSe pronto está suspensa: o emissor gera o PDF.
+`Pdf\Danfse` segue o Anexo I da Nota Técnica SE/CGNFS-e nº 008/2026 (v1.02) e lê **só o XML da
+NFS-e** devolvido pela Sefin, como a NT exige:
+
+```php
+use DanielBBarcelos\NotasFiscais\Pdf\Danfse;
+
+$pdf = Danfse::gerar($emitida->bruto['xml_nfse'], [
+    'cancelada' => false,      // marca d'água CANCELADA (o cancelamento é evento, não está no XML)
+    'substituida' => false,    // marca d'água SUBSTITUÍDA
+    'canhoto' => false,        // bloco de canhoto, opcional
+    'municipio' => fn (string $ibge) => $nomes[$ibge] ?? null, // o XML traz só o código do tomador
+]);
+```
+
+Uma página A4, QR Code da consulta pública, "NFS-e SEM VALIDADE JURÍDICA" quando `tpAmb` = 2, blocos
+sem dados reduzidos a uma linha, e descrição e informações complementares cortadas com "(...)" pela
+altura disponível, para nunca passar de uma página. Requer `dompdf/dompdf` e `bacon/bacon-qr-code`.
+
+### Parâmetros municipais
+
+```php
+$gateway->consultarConvenio('3152501');           // ['conveniado' => true|false|null, 'bruto' => [...]]
+$gateway->consultarAliquota('3152501', '010701'); // ['aliquota' => 2.0|null, 'bruto' => [...]]
+```
+
+O formato dessas respostas não está nos manuais públicos (o Swagger exige certificado). Os campos
+são lidos de forma defensiva e o JSON original volta em `bruto`.
+
+Fora do pacote por enquanto: grupo IBS/CBS da reforma tributária (opcional no leiaute v1.01),
+substituição de NFS-e e o TXT de exportação, que é um layout do IPM. Consulta por número não existe neste padrão:
 `consultar()` lança e indica `consultarPorAutenticidade()`.
 
 Leiaute, regras de negócio e XSD oficiais em [`docs/nfse-nacional/`](docs/nfse-nacional/). A
