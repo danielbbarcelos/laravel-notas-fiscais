@@ -24,7 +24,9 @@ final class AssinaturaXml
 
     /**
      * Assina o elemento $tag (que deve ter o atributo Id) e devolve o documento
-     * serializado, sem declaração XML, pronto para comprimir e enviar.
+     * serializado com a declaração XML, pronto para comprimir e enviar. A Sefin
+     * recusa o XML sem `encoding="UTF-8"` declarado (E1229); a declaração fica
+     * fora do elemento assinado, então não entra no digest.
      */
     public static function assinar(DOMDocument $dom, string $tag, Certificado $certificado): string
     {
@@ -60,7 +62,9 @@ final class AssinaturaXml
         $x509 = self::el($dom, $keyInfo, 'X509Data');
         self::el($dom, $x509, 'X509Certificate', $certificado->certificadoBase64());
 
-        return (string) $dom->saveXML($dom->documentElement);
+        $dom->encoding = 'UTF-8';
+
+        return (string) $dom->saveXML();
     }
 
     /**

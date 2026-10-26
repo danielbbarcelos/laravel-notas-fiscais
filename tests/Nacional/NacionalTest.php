@@ -201,6 +201,8 @@ it('emite: envia a DPS assinada e compactada para a Sefin de produção', functi
         return $request->method() === 'POST'
             && str_contains($xml, 'Id="DPS315250122410049900017700001000000000000042"')
             && str_contains($xml, '<tpAmb>1</tpAmb>')
+            // E1229: a Sefin recusa o XML que não declara UTF-8.
+            && str_starts_with($xml, '<?xml version="1.0" encoding="UTF-8"?>')
             && AssinaturaXml::valida($xml, 'infDPS');
     });
 });
@@ -388,6 +390,7 @@ it('cancela por evento e101101 assinado, válido no XSD do pedido', function () 
         expect(validaContraXsd($xml, 'pedRegEvento_v1.01.xsd'))->toBe([])
             ->and($xml)->toContain('Id="PRE'.CHAVE_NACIONAL.'101101"')
             ->and($xml)->toContain('<cMotivo>1</cMotivo>')
+            ->and($xml)->toStartWith('<?xml version="1.0" encoding="UTF-8"?>')
             ->and(AssinaturaXml::valida($xml, 'infPedReg'))->toBeTrue();
 
         return true;
