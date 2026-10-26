@@ -38,12 +38,38 @@ class DpsMapper
 {
     public const VERSAO = '1.01';
 
+    /** Leiaute v1.01 de 09/02/2026, o da produção. */
+    public const LEIAUTE_20260209 = '20260209';
+
+    /**
+     * Leiaute v1.01 de 20/10/2026 (NT 009), já exigido pela produção restrita:
+     * finNFSe obrigatório no infDPS e cNBS antes de xDescServ no cServ. A produção
+     * passa a exigi-lo conforme o cronograma do portal; até lá, recusa finNFSe.
+     */
+    public const LEIAUTE_20261020 = '20261020';
+
+    /**
+     * @param  array<int, string>  $leiautes  leiaute por tpAmb (1 produção, 2 produção restrita)
+     */
     public function __construct(
         protected RegimeTributario $regime,
         protected ?string $codigoNbsPadrao = null,
         protected string $versaoAplicativo = 'laravel-nf 1.3',
         protected bool $informarInscricaoMunicipal = false,
+        protected array $leiautes = [1 => self::LEIAUTE_20260209, 2 => self::LEIAUTE_20261020],
     ) {
+    }
+
+    /** O leiaute que o ambiente exige. */
+    public function leiaute(int $ambiente): string
+    {
+        return $this->leiautes[$ambiente] ?? self::LEIAUTE_20260209;
+    }
+
+    /** Se o ambiente já está no leiaute da NT 009. */
+    protected function nt009(int $ambiente): bool
+    {
+        return $this->leiaute($ambiente) === self::LEIAUTE_20261020;
     }
 
     /** Canônico -> DPS sem assinatura (o documento, para o gateway assinar). */
@@ -93,11 +119,15 @@ class DpsMapper
         $this->add($dom, $inf, 'nDPS', (string) $dados->numeroDps);
         $this->add($dom, $inf, 'dCompet', $this->competencia($dados));
         $this->add($dom, $inf, 'tpEmit', '1');
+        if ($this->nt009($ambiente)) {
+            // 0 = NFS-e regular; crédito (1) e débito (2) são as notas de ajuste do IBS/CBS.
+            $this->add($dom, $inf, 'finNFSe', '0');
+        }
         $this->add($dom, $inf, 'cLocEmi', $municipioEmissor);
 
         $this->prestador($dom, $inf, $prestador);
         $this->tomador($dom, $inf, $dados->tomador);
-        $this->servico($dom, $inf, $dados, $item, $municipioEmissor);
+        $this->servico($dom, $inf, $dados, $item, $municipioEmissor, $ambiente);
         $this->valores($dom, $inf, $dados, $item);
 
         return $dom;
@@ -224,7 +254,7 @@ class DpsMapper
         }
     }
 
-    protected function servico(DOMDocument $dom, DOMElement $inf, NotaServico $dados, ItemServico $item, string $municipioEmissor): void
+    protected function servico(DOMDocument $dom, DOMElement $inf, NotaServico $dados, ItemServico $item, string $municipioEmissor, int $ambiente = 1): void
     {
         $serv = $this->el($dom, $inf, 'serv');
 
@@ -234,8 +264,13 @@ class DpsMapper
 
         $cServ = $this->el($dom, $serv, 'cServ');
         $this->add($dom, $cServ, 'cTribNac', $this->codigoTributacaoNacional($item->codigoItemListaServico));
+        $nbs = $this->nbs($item);
+        // NT 009: o cNBS passou para antes da descrição.
+        if ($nbs !== null && $this->nt009($ambiente)) {
+            $this->add($dom, $cServ, 'cNBS', $nbs);
+        }
         $this->add($dom, $cServ, 'xDescServ', NacionalXml::texto2000($item->descritivo));
-        if (($nbs = $this->nbs($item)) !== null) {
+        if ($nbs !== null && ! $this->nt009($ambiente)) {
             $this->add($dom, $cServ, 'cNBS', $nbs);
         }
 
