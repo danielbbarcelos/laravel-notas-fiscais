@@ -143,6 +143,17 @@ Uma página A4, QR Code da consulta pública, "NFS-e SEM VALIDADE JURÍDICA" qua
 sem dados reduzidos a uma linha, e descrição e informações complementares cortadas com "(...)" pela
 altura disponível, para nunca passar de uma página. Requer `dompdf/dompdf` e `bacon/bacon-qr-code`.
 
+### Leiaute por ambiente (NT 009)
+
+A produção restrita adotou em 20/10/2026 o leiaute v1.01 da NT 009, que a produção ainda não
+aceita: `finNFSe` obrigatório no `infDPS` (0 = NFS-e regular) e `cNBS` antes de `xDescServ` no
+`cServ`. Sem isso a Sefin de homologação recusa a DPS com E1235. O driver gera o leiaute de cada
+ambiente: o de 09/02/2026 na produção e o de 20/10/2026 na produção restrita. Quando a produção
+migrar (o cronograma sai no portal da NFS-e), basta `'leiaute_producao' => 'nt009'` na config.
+`leiaute_homologacao` faz o caminho inverso. Os XSD dos dois pacotes ficam em
+[`docs/nfse-nacional/schemas/`](docs/nfse-nacional/schemas/) e
+[`docs/nfse-nacional/schemas-prodrest-20261020/`](docs/nfse-nacional/schemas-prodrest-20261020/).
+
 ### Parâmetros municipais
 
 ```php

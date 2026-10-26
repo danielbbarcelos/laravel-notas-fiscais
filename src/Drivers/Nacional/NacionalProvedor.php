@@ -57,11 +57,28 @@ class NacionalProvedor implements Provedor
                 codigoNbsPadrao: isset($this->config['codigo_nbs']) ? (string) $this->config['codigo_nbs'] : null,
                 versaoAplicativo: $versao,
                 informarInscricaoMunicipal: (bool) ($this->config['informar_inscricao_municipal'] ?? false),
+                leiautes: [
+                    1 => self::leiaute($this->config['leiaute_producao'] ?? null, DpsMapper::LEIAUTE_20260209),
+                    2 => self::leiaute($this->config['leiaute_homologacao'] ?? null, DpsMapper::LEIAUTE_20261020),
+                ],
             ),
             cancelamentos: new CancelamentoNacionalMapper($versao),
             ambiente: self::ambiente($this->config['ambiente'] ?? 1),
             prestadorPadrao: $this->prestadorPadrao(),
         );
+    }
+
+    /**
+     * Leiaute de um ambiente na config: "20260209" ou "20261020" ("nt009" também
+     * vale para o segundo). Vazio ou desconhecido fica no padrão do ambiente.
+     */
+    public static function leiaute(mixed $valor, string $padrao): string
+    {
+        return match (strtolower(trim((string) $valor))) {
+            DpsMapper::LEIAUTE_20261020, 'nt009' => DpsMapper::LEIAUTE_20261020,
+            DpsMapper::LEIAUTE_20260209 => DpsMapper::LEIAUTE_20260209,
+            default => $padrao,
+        };
     }
 
     /** "producao"/1 -> 1; "homologacao"/"producao_restrita"/2 -> 2. */

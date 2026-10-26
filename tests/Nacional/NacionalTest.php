@@ -150,30 +150,35 @@ function xmlEnviado(Request $request, string $campo): string
  * norma; o validador .NET da Sefin as trata como âncora). Sem a correção, nenhuma
  * série passaria aqui, nem "1" nem "00001".
  */
-function schemasNacionais(): string
+/**
+ * Cópia dos XSD oficiais sem as âncoras do pattern da série, que o libxml lê
+ * literalmente. "schemas" é o pacote da produção (09/02/2026) e
+ * "schemas-prodrest-20261020" o da produção restrita (NT 009).
+ */
+function schemasNacionais(string $pasta = 'schemas'): string
 {
-    static $dir = null;
+    static $dirs = [];
 
-    if ($dir !== null) {
-        return $dir;
+    if (isset($dirs[$pasta])) {
+        return $dirs[$pasta];
     }
 
-    $dir = sys_get_temp_dir().'/nfse-nacional-xsd-'.getmypid();
+    $dir = sys_get_temp_dir().'/nfse-nacional-xsd-'.$pasta.'-'.getmypid();
     @mkdir($dir);
 
-    foreach (glob(__DIR__.'/../../docs/nfse-nacional/schemas/*.xsd') as $arquivo) {
+    foreach (glob(__DIR__.'/../../docs/nfse-nacional/'.$pasta.'/*.xsd') as $arquivo) {
         file_put_contents($dir.'/'.basename($arquivo), str_replace('value="^0{0,4}\d{1,5}$"', 'value="0{0,4}\d{1,5}"', file_get_contents($arquivo)));
     }
 
-    return $dir;
+    return $dirs[$pasta] = $dir;
 }
 
-function validaContraXsd(string $xml, string $xsd): array
+function validaContraXsd(string $xml, string $xsd, string $pasta = 'schemas'): array
 {
     $dom = new DOMDocument();
     $dom->loadXML($xml);
     $anterior = libxml_use_internal_errors(true);
-    $ok = $dom->schemaValidate(schemasNacionais().'/'.$xsd, LIBXML_NONET);
+    $ok = $dom->schemaValidate(schemasNacionais($pasta).'/'.$xsd, LIBXML_NONET);
     $erros = array_map(fn ($e) => trim($e->message), libxml_get_errors());
     libxml_clear_errors();
     libxml_use_internal_errors($anterior);
@@ -263,6 +268,49 @@ it('teste (homologação) vai para a produção restrita com tpAmb 2', function 
 
     Http::assertSent(fn (Request $request) => str_starts_with($request->url(), NacionalConnector::URL_PRODUCAO_RESTRITA)
         && str_contains(xmlEnviado($request, 'dpsXmlGZipB64'), '<tpAmb>2</tpAmb>'));
+});
+
+it('na produção restrita, gera o leiaute da NT 009, válido no XSD de 20/10/2026', function () {
+    Http::fake([NacionalConnector::URL_PRODUCAO_RESTRITA.'/nfse' => Http::response(respostaEmissaoNacional(), 201)]);
+
+    // ME/EPP com retenções: cobre o regTrib, o totTrib do Simples e o tribFed no leiaute novo.
+    NotaFiscal::build(configNacional(['simples_nacional' => 3, 'tributos_simples' => '0.00']))->nfse()->emitir(notaNacional([
+        'teste' => true,
+        'valorIr' => Valor::reais('15.00'),
+        'valorPis' => Valor::reais('6.50'),
+        'valorCofins' => Valor::reais('30.00'),
+    ]));
+
+    Http::assertSent(function (Request $request) {
+        $xml = xmlEnviado($request, 'dpsXmlGZipB64');
+
+        expect(validaContraXsd($xml, 'DPS_v1.01.xsd', 'schemas-prodrest-20261020'))->toBe([])
+            ->and($xml)->toContain('</tpEmit><finNFSe>0</finNFSe><cLocEmi>')
+            ->and($xml)->toMatch('#<cTribNac>\d{6}</cTribNac><cNBS>\d{9}</cNBS><xDescServ>#')
+            ->and(AssinaturaXml::valida($xml, 'infDPS'))->toBeTrue();
+
+        return true;
+    });
+});
+
+it('na produção, mantém o leiaute de 09/02/2026 até a config trocar', function () {
+    Http::fake([NacionalConnector::URL_PRODUCAO.'/nfse' => Http::response(respostaEmissaoNacional(), 201)]);
+
+    NotaFiscal::build(configNacional())->nfse()->emitir(notaNacional());
+    NotaFiscal::build(configNacional(['leiaute_producao' => 'nt009']))->nfse()->emitir(notaNacional());
+
+    $enviados = [];
+    Http::assertSent(function (Request $request) use (&$enviados) {
+        $enviados[] = xmlEnviado($request, 'dpsXmlGZipB64');
+
+        return true;
+    });
+
+    expect($enviados)->toHaveCount(2)
+        ->and($enviados[0])->not->toContain('finNFSe')
+        ->and(validaContraXsd($enviados[0], 'DPS_v1.01.xsd'))->toBe([])
+        ->and($enviados[1])->toContain('<finNFSe>0</finNFSe>')
+        ->and(validaContraXsd($enviados[1], 'DPS_v1.01.xsd', 'schemas-prodrest-20261020'))->toBe([]);
 });
 
 it('usa o certificado no mTLS em memória, sem gravar a chave em disco', function () {
