@@ -16,12 +16,21 @@ use Illuminate\Support\Facades\Http;
  *
  * O ambiente decide a URL: tpAmb 1 (produção) vai para sefin.nfse.gov.br e tpAmb
  * 2 (produção restrita, a homologação do padrão) para sefin.producaorestrita.
+ *
+ * Os parâmetros municipais (convênio, alíquotas) não ficam na Sefin: moraram lá
+ * no guia de 2025 (/parametros_municipais/...), mas o serviço real está no ADN,
+ * em /parametrizacao, com outro formato de caminho. A Sefin responde 404 para os
+ * caminhos antigos. Mesmo certificado, mesmo mTLS.
  */
 class NacionalConnector
 {
     public const URL_PRODUCAO = 'https://sefin.nfse.gov.br/SefinNacional';
 
     public const URL_PRODUCAO_RESTRITA = 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional';
+
+    public const URL_PARAMETROS_PRODUCAO = 'https://adn.nfse.gov.br/parametrizacao';
+
+    public const URL_PARAMETROS_PRODUCAO_RESTRITA = 'https://adn.producaorestrita.nfse.gov.br/parametrizacao';
 
     /**
      * @param  array<string, mixed>  $config
@@ -53,6 +62,28 @@ class NacionalConnector
     public function consultar(string $caminho, int $ambiente): array
     {
         return $this->json($this->cliente()->get($this->url($ambiente).$caminho));
+    }
+
+    /**
+     * GET na API de parâmetros municipais do ADN; devolve o JSON da resposta.
+     *
+     * @return array<string, mixed>
+     */
+    public function consultarParametros(string $caminho, int $ambiente): array
+    {
+        return $this->json($this->cliente()->get($this->urlParametros($ambiente).$caminho));
+    }
+
+    public function urlParametros(int $ambiente): string
+    {
+        $chave = $ambiente === 1 ? 'parametros_url' : 'parametros_url_homologacao';
+        $url = $this->config[$chave] ?? null;
+
+        if (! is_string($url) || $url === '') {
+            $url = $ambiente === 1 ? self::URL_PARAMETROS_PRODUCAO : self::URL_PARAMETROS_PRODUCAO_RESTRITA;
+        }
+
+        return rtrim($url, '/');
     }
 
     public function url(int $ambiente): string

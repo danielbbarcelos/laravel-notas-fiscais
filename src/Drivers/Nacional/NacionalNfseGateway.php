@@ -115,13 +115,13 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
     }
 
     /**
-     * Situação do convênio do município com o Sistema Nacional (GET
-     * /parametros_municipais/{cMun}/convenio). Decide se a alíquota vai na DPS:
-     * com convênio ativo a Sefin aplica a parametrizada e rejeita a informada.
+     * Situação do convênio do município com o Sistema Nacional (ADN, GET
+     * /parametrizacao/{cMun}/convenio). Decide se a alíquota vai na DPS: com
+     * convênio ativo a Sefin aplica a parametrizada e rejeita a informada.
      *
-     * O Swagger da Sefin só abre com certificado, e o formato da resposta não está
-     * nos manuais públicos: "conveniado" é lido de forma defensiva e o JSON
-     * original volta em "bruto" para quem precisar de outro campo.
+     * A resposta é {mensagem, parametrosConvenio: {aderenteAmbienteNacional,
+     * aderenteEmissorNacional, ...}}, com os "sim/não" como 1, 0 e -1 (não
+     * informado). O JSON original volta em "bruto".
      *
      * @return array{conveniado: ?bool, bruto: array<string, mixed>}
      */
@@ -133,19 +133,21 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
             throw new NotaFiscalException("Código IBGE inválido: \"{$codigoIbge}\" (são 7 dígitos).");
         }
 
-        $json = $this->http->consultar("/parametros_municipais/{$ibge}/convenio", $this->ambiente);
+        $json = $this->http->consultarParametros("/{$ibge}/convenio", $this->ambiente);
 
         return ['conveniado' => self::lerConveniado($json), 'bruto' => $json];
     }
 
     /**
-     * Alíquota parametrizada pelo município para um código de tributação
-     * nacional (GET /parametros_municipais/{cMun}/{cTribNac}). Mesma ressalva de
-     * formato de consultarConvenio(): a alíquota é procurada pelo nome do campo.
+     * Alíquota do município para um código de tributação nacional na competência
+     * (ADN, GET /parametrizacao/{cMun}/{código}/{competência}/aliquota). O código
+     * vai completo e pontuado, cTribNac mais o complemento municipal "000"
+     * (01.07.01.000): o cTribNac puro e os 9 dígitos sem ponto voltam 400. A
+     * competência é AAAA-MM-DD, e sem ela vale o dia de hoje.
      *
      * @return array{aliquota: ?float, bruto: array<string, mixed>}
      */
-    public function consultarAliquota(string $codigoIbge, string $codigoTributacaoNacional): array
+    public function consultarAliquota(string $codigoIbge, string $codigoTributacaoNacional, ?string $competencia = null): array
     {
         $ibge = NacionalXml::digitos($codigoIbge);
         $codigo = NacionalXml::digitos($codigoTributacaoNacional);
@@ -154,9 +156,12 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
             throw new NotaFiscalException('Consulta de alíquota exige o IBGE (7 dígitos) e o código de tributação nacional (6 dígitos).');
         }
 
-        $json = $this->http->consultar("/parametros_municipais/{$ibge}/{$codigo}", $this->ambiente);
+        $completo = substr($codigo, 0, 2).'.'.substr($codigo, 2, 2).'.'.substr($codigo, 4, 2).'.000';
+        $competencia ??= date('Y-m-d');
 
-        return ['aliquota' => self::lerAliquota($json), 'bruto' => $json];
+        $json = $this->http->consultarParametros("/{$ibge}/{$completo}/{$competencia}/aliquota", $this->ambiente);
+
+        return ['aliquota' => self::lerAliquota($json, $completo, $competencia), 'bruto' => $json];
     }
 
     /**
@@ -169,19 +174,50 @@ class NacionalNfseGateway implements ExportaArquivos, NfseGateway
         foreach (['convenioAtivo', 'conveniado', 'situacaoConvenio', 'aderenteAmbienteNacional'] as $campo) {
             $valor = self::procurar($json, $campo);
 
-            if ($valor !== null) {
-                return in_array(strtolower((string) $valor), ['1', 'true', 's', 'sim', 'ativo'], true);
+            if ($valor === null) {
+                continue;
             }
+
+            // -1 é o "não informado" dos enums do ADN: não decide nada.
+            if ((string) $valor === '-1') {
+                return null;
+            }
+
+            return in_array(strtolower((string) $valor), ['1', 'true', 's', 'sim', 'ativo'], true);
         }
 
         return null;
     }
 
     /**
+     * A alíquota vigente na competência. A resposta do ADN é {aliquotas: {"01.07.01.000":
+     * [{Aliq, DtIni, DtFim}, ...]}}, um histórico por código; sem esse formato, cai na
+     * busca pelo nome do campo.
+     *
      * @param  array<mixed>  $json
      */
-    public static function lerAliquota(array $json): ?float
+    public static function lerAliquota(array $json, ?string $codigo = null, ?string $competencia = null): ?float
     {
+        $mapa = $json['aliquotas'] ?? null;
+
+        if (is_array($mapa) && $mapa !== []) {
+            $historico = ($codigo !== null && isset($mapa[$codigo]) && is_array($mapa[$codigo])) ? $mapa[$codigo] : reset($mapa);
+            $dia = $competencia ?? date('Y-m-d');
+
+            foreach (is_array($historico) ? $historico : [] as $faixa) {
+                if (! is_array($faixa) || ! is_numeric($faixa['Aliq'] ?? null)) {
+                    continue;
+                }
+
+                $inicio = substr((string) ($faixa['DtIni'] ?? ''), 0, 10);
+                $fim = substr((string) ($faixa['DtFim'] ?? ''), 0, 10);
+
+                if (($inicio === '' || $inicio <= $dia) && ($fim === '' || $fim >= $dia)) {
+                    return (float) $faixa['Aliq'];
+                }
+            }
+        }
+
         foreach (['aliquota', 'Aliq', 'aliq', 'pAliq', 'valorAliquota'] as $campo) {
             $valor = self::procurar($json, $campo);
 
