@@ -476,8 +476,8 @@ it('ME/EPP vai com regApTribSN e pTotTribSN, válido no XSD', function () {
     });
 });
 
-it('consulta o convênio do município e lê a adesão em formatos diferentes', function () {
-    Http::fake([NacionalConnector::URL_PRODUCAO.'/parametros_municipais/3152501/convenio' => Http::response([
+it('consulta o convênio do município no ADN e lê a adesão em formatos diferentes', function () {
+    Http::fake([NacionalConnector::URL_PARAMETROS_PRODUCAO.'/3152501/convenio' => Http::response([
         'mensagem' => 'OK',
         'parametrosConvenio' => ['aderenteAmbienteNacional' => 1, 'aderenteEmissorNacional' => 0],
     ], 200)]);
@@ -487,16 +487,35 @@ it('consulta o convênio do município e lê a adesão em formatos diferentes', 
     expect($resultado['conveniado'])->toBeTrue()
         ->and($resultado['bruto']['mensagem'])->toBe('OK');
 
-    expect(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::lerConveniado(['dados' => ['aderenteAmbienteNacional' => 0]]))->toBeFalse()
-        ->and(\DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::lerConveniado(['outro' => 'x']))->toBeNull();
+    $gateway = \DanielBBarcelos\NotasFiscais\Drivers\Nacional\NacionalNfseGateway::class;
+    expect($gateway::lerConveniado(['dados' => ['aderenteAmbienteNacional' => 0]]))->toBeFalse()
+        ->and($gateway::lerConveniado(['parametrosConvenio' => ['aderenteAmbienteNacional' => -1]]))->toBeNull()
+        ->and($gateway::lerConveniado(['outro' => 'x']))->toBeNull();
 });
 
-it('consulta a alíquota parametrizada do serviço no município', function () {
-    Http::fake([NacionalConnector::URL_PRODUCAO.'/parametros_municipais/3152501/010701' => Http::response([
-        'aliquotas' => ['010701' => [['Incidencia' => 'Municipal', 'Aliq' => 2.5, 'DtIni' => '2026-01-01']]],
+it('consulta a alíquota no ADN com o código pontuado e a competência', function () {
+    Http::fake([NacionalConnector::URL_PARAMETROS_PRODUCAO.'/3152501/01.07.01.000/2026-11-03/aliquota' => Http::response([
+        'mensagem' => null,
+        'aliquotas' => ['01.07.01.000' => [
+            ['Incidencia' => 'Municipal', 'Aliq' => 3.0, 'DtIni' => '2025-01-01T00:00:00', 'DtFim' => '2025-12-31T00:00:00'],
+            ['Incidencia' => 'Municipal', 'Aliq' => 2.5, 'DtIni' => '2026-01-01T00:00:00', 'DtFim' => null],
+        ]],
     ], 200)]);
 
-    $resultado = NotaFiscal::build(configNacional())->nfse()->consultarAliquota('3152501', '01.07.01');
+    $resultado = NotaFiscal::build(configNacional())->nfse()->consultarAliquota('3152501', '01.07.01', '2026-11-03');
 
+    // A faixa vigente na competência, não a primeira do histórico.
     expect($resultado['aliquota'])->toBe(2.5);
+});
+
+it('não chama mais o caminho antigo de parâmetros da Sefin', function () {
+    Http::fake([
+        NacionalConnector::URL_PARAMETROS_PRODUCAO.'/*' => Http::response(['parametrosConvenio' => ['aderenteAmbienteNacional' => 1]], 200),
+        '*' => Http::response([], 404),
+    ]);
+
+    NotaFiscal::build(configNacional())->nfse()->consultarConvenio('3152501');
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'parametros_municipais'));
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://adn.nfse.gov.br/parametrizacao/3152501/convenio'));
 });

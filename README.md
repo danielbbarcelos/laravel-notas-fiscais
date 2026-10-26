@@ -148,10 +148,15 @@ altura disponível, para nunca passar de uma página. Requer `dompdf/dompdf` e `
 ```php
 $gateway->consultarConvenio('3152501');           // ['conveniado' => true|false|null, 'bruto' => [...]]
 $gateway->consultarAliquota('3152501', '010701'); // ['aliquota' => 2.0|null, 'bruto' => [...]]
+$gateway->consultarAliquota('3152501', '010701', '2026-11-03'); // numa competência específica
 ```
 
-O formato dessas respostas não está nos manuais públicos (o Swagger exige certificado). Os campos
-são lidos de forma defensiva e o JSON original volta em `bruto`.
+Os parâmetros ficam no **ADN** (`adn.nfse.gov.br/parametrizacao`, e `adn.producaorestrita…` na
+produção restrita), não na Sefin: os caminhos `/parametros_municipais/...` do guia de 2025 respondem
+404. O convênio vem em `/{cMun}/convenio` (`parametrosConvenio.aderenteAmbienteNacional`: 1, 0 ou
+-1, que é "não informado") e a alíquota em `/{cMun}/{01.07.01.000}/{AAAA-MM-DD}/aliquota`, com o
+código pontuado e o complemento municipal `000`. As URLs podem ser trocadas por `parametros_url` e
+`parametros_url_homologacao` na config. O JSON original volta em `bruto`.
 
 Fora do pacote por enquanto: grupo IBS/CBS da reforma tributária (opcional no leiaute v1.01),
 substituição de NFS-e e o TXT de exportação, que é um layout do IPM. Consulta por número não existe neste padrão:
